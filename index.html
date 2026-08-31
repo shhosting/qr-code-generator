@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Code Generator — shhosting.net</title>
+<meta name="description" content="Offline QR code generator. Style the shape, colors, logo, and frame, then export PNG, SVG, JPEG, or WebP. Nothing leaves your browser.">
+
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1720" media="(prefers-color-scheme: dark)">
+
+<meta property="og:title" content="QR Code Generator — shhosting.net">
+<meta property="og:description" content="Offline QR code generator. Style the shape, colors, logo, and frame, then export it. Nothing leaves your browser.">
+<meta property="og:image" content="https://shhosting.net/assets/img/og-image.png">
+<meta property="og:url" content="https://shhosting.net/qr-code-generator">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="/assets/css/style.css">
+<style>
+/* ---------------------------------------------------------------
+   Page-scoped styles — structural/behavioral CSS kept from the
+   original standalone tool. Color values now source from the
+   shared site variables (assets/css/style.css) plus a small set
+   of tokens for tones the shared sheet doesn't define, so the
+   tool is dark/light aware like the rest of the site.
+--------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+  /* --accent, --accent-outline, --bg, --surface, --border, --structure
+     come from the shared stylesheet (assets/css/style.css) and are not
+     redeclared here — this page inherits them directly so there's a
+     single source of truth for the site palette. */
+  --text: var(--structure);
+  --accent-strong: var(--accent-outline);
+  --accent-tint: rgba(217, 119, 6, 0.12);
+  --surface-2: #eef2f7;
+  --border-strong: #cbd5e1;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  --btn-text: #0f1720;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.14);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    /* accent-strong gets its own brighter dark-mode value (rather than
+       aliasing --accent-outline, which stays constant) for contrast on
+       dark surfaces — same convention used in checksum-verifier. */
+    --accent-strong: #f2a94d;
+    --surface-2: #1c252a;
+    --border-strong: #3a464d;
+    --text-muted: #8b9aa1;
+    --text-faint: #5c6970;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+/* body font/background/color/line-height inherited from the shared
+   stylesheet; only page-specific globals are declared here. */
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; margin: 0; text-transform: none; }
+p { margin: 0; }
+button { font-family: inherit; }
+
+.skip-link {
+  position: absolute; left: -999px; top: 0;
+  background: var(--accent); color: var(--btn-text); padding: 0.5rem 1rem; border-radius: var(--radius-sm);
+  z-index: 100;
+}
+.skip-link:focus { left: 1rem; top: 1rem; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------
+   Header / nav — ported from assets/css/style.css so this page
+   matches the rest of shhosting.net exactly (linked stylesheet
+   already provides these rules; kept here as page-local backup
+   is unnecessary, so this block only adds what's page-specific).
+--------------------------------------------------------------- */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+/* This page's content is a wide two-column grid, unlike the centered
+   under-construction/checksum-verifier layouts, so main is reset to
+   normal block flow instead of the shared sheet's centered flexbox. */
+main.wrap {
+  flex: 1;
+  display: block;
+}
+
+/* ---------------------------------------------------------------
+   Layout
+--------------------------------------------------------------- */
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+}
+.intro {
+  max-width: 62ch;
+  margin: 0 0 1.75rem;
+}
+.intro h1 {
+  font-size: clamp(1.5rem, 3vw, 1.9rem);
+  margin-bottom: 0.5rem;
+}
+.intro p {
+  color: var(--text-muted);
+  font-size: 0.98rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+}
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    align-items: start;
+  }
+  .preview-col { position: sticky; top: 1.25rem; order: 2; }
+  .controls-col { order: 1; }
+}
+
+/* ---------------------------------------------------------------
+   Presets
+--------------------------------------------------------------- */
+.presets {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.preset-chip {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.4rem 0.75rem 0.4rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+.preset-chip:hover { border-color: var(--accent); }
+.preset-chip:active { transform: scale(0.97); }
+.preset-swatch {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+
+/* ---------------------------------------------------------------
+   Controls (accordion)
+--------------------------------------------------------------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.section {
+  border-bottom: 1px solid var(--border);
+}
+.section:last-child { border-bottom: none; }
+.section > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.95rem 1.1rem;
+  font-weight: 600;
+  font-size: 0.94rem;
+  user-select: none;
+}
+.section > summary::-webkit-details-marker { display: none; }
+.section > summary .chev {
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.section[open] > summary .chev { transform: rotate(90deg); color: var(--accent); }
+.section > summary:hover { background: var(--surface-2); }
+.section-body {
+  padding: 0.2rem 1.1rem 1.15rem;
+  display: flex; flex-direction: column; gap: 0.95rem;
+}
+
+.field { display: flex; flex-direction: column; gap: 0.4rem; }
+.field-row { display: flex; gap: 0.7rem; }
+.field-row > .field { flex: 1; min-width: 0; }
+label.label, span.label {
+  font-size: 0.78rem; font-weight: 500; color: var(--text-muted);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem;
+}
+.label small { font-weight: 400; color: var(--text-faint); font-family: var(--mono); }
+
+textarea, select, input[type="text"], input[type="number"] {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.65rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+textarea { resize: vertical; min-height: 4.2em; font-family: var(--mono); font-size: 0.85rem; }
+textarea:focus, select:focus, input:focus { border-color: var(--accent); background: var(--surface); }
+select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%); background-position: calc(100% - 18px) center, calc(100% - 13px) center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 2rem; cursor: pointer; }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 2px;
+  background: var(--border-strong); outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--surface);
+  background: var(--accent); cursor: pointer; box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.seg button {
+  border: none; background: var(--surface-2); color: var(--text-muted);
+  padding: 0.45rem 0.3rem; font-size: 0.8rem; font-weight: 500; cursor: pointer;
+  border-left: 1px solid var(--border-strong);
+}
+.seg button:first-child { border-left: none; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--btn-text); }
+
+.color-field {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); padding: 0.35rem 0.5rem;
+}
+.color-field input[type="color"] {
+  -webkit-appearance: none; appearance: none;
+  width: 26px; height: 26px; border: none; border-radius: 50%;
+  padding: 0; background: none; cursor: pointer; flex-shrink: 0;
+}
+.color-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; }
+.color-field input[type="color"]::-webkit-color-swatch { border: 1px solid var(--border-strong); border-radius: 50%; }
+.color-field input[type="text"] {
+  border: none; background: none; padding: 0.15rem 0; font-family: var(--mono); font-size: 0.82rem;
+}
+.color-field input[type="text"]:focus { background: none; }
+.color-row { display: flex; gap: 0.6rem; align-items: flex-end; }
+.color-row .color-field { flex: 1; }
+
+.checkline {
+  display: flex; align-items: center; gap: 0.55rem;
+  font-size: 0.86rem; font-weight: 500; cursor: pointer;
+}
+.checkline input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+}
+
+.gradient-row { display: none; flex-direction: column; gap: 0.6rem; padding-top: 0.2rem; }
+.gradient-row.active { display: flex; }
+.gradient-stops { display: flex; gap: 0.6rem; }
+.gradient-stops .color-field { flex: 1; }
+
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 0; }
+
+.help {
+  font-size: 0.78rem; color: var(--text-faint); line-height: 1.45;
+}
+
+.upload-zone {
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+  padding: 0.9rem; text-align: center; cursor: pointer;
+  background: var(--surface-2); transition: border-color 0.15s ease;
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.upload-zone:hover { border-color: var(--accent); }
+.upload-zone input[type="file"] { display: none; }
+.logo-thumb {
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  overflow: hidden;
+}
+.logo-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.logo-thumb svg { color: var(--text-faint); }
+.upload-copy { text-align: left; flex: 1; }
+.upload-copy strong { font-size: 0.84rem; display: block; }
+.upload-copy span { font-size: 0.76rem; color: var(--text-muted); }
+.logo-remove {
+  border: 1px solid var(--border-strong); background: var(--surface);
+  border-radius: var(--radius-sm); padding: 0.3rem 0.6rem; font-size: 0.76rem;
+  cursor: pointer; color: var(--text-muted); flex-shrink: 0;
+}
+.logo-remove:hover { color: var(--text); border-color: var(--accent); }
+
+/* ---------------------------------------------------------------
+   Preview
+--------------------------------------------------------------- */
+.preview-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+.preview-stage {
+  background:
+    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%) -10px 0/20px 20px,
+    linear-gradient(-45deg, var(--surface-2) 25%, transparent 25%) -10px 0/20px 20px,
+    linear-gradient(45deg, transparent 75%, var(--surface-2) 75%) -10px 0/20px 20px,
+    linear-gradient(-45deg, transparent 75%, var(--surface-2) 75%) -10px 0/20px 20px,
+    var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  min-height: 320px;
+}
+#qr-preview-mount { width: min(100%, 340px); }
+#qr-preview-mount svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 10px 24px rgba(0,0,0,0.12)); }
+.preview-status {
+  margin-top: 0.85rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+.preview-status.is-error { color: #c2410c; font-weight: 500; }
+
+.export-row {
+  margin-top: 1.1rem;
+  display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: flex-end;
+}
+.export-size { flex: 1; min-width: 140px; }
+.export-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.85rem; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  border-radius: var(--radius-sm); border: 1px solid transparent;
+  padding: 0.55rem 0.85rem; font-size: 0.84rem; font-weight: 600;
+  cursor: pointer; transition: filter 0.15s ease, transform 0.1s ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: var(--btn-text); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-block { width: 100%; justify-content: center; }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.reset-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 1rem; gap: 0.75rem;
+}
+.reset-row .btn-ghost { font-weight: 500; }
+
+.copy-toast {
+  position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%) translateY(12px);
+  background: var(--text); color: var(--bg);
+  padding: 0.55rem 1rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 50;
+}
+.copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Tool-specific line that sits above the shared .footer-credit block
+   (same pairing pattern as checksum-verifier's .ai-disclaimer). */
+.tool-disclaimer {
+  max-width: none;
+  margin: 0 auto 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header>
+  <a class="brand-link" href="/" aria-label="shhosting.net home">
+    <img class="logo-icon theme-swap light" src="/assets/img/logo-light.svg" alt="">
+    <img class="logo-icon theme-swap dark" src="/assets/img/logo-dark.svg" alt="">
+    <img class="logo-wordmark theme-swap light" src="/assets/img/wordmark-light.svg" alt="shhosting.net">
+    <img class="logo-wordmark theme-swap dark" src="/assets/img/wordmark-dark.svg" alt="shhosting.net">
+  </a>
+  <nav class="site-nav">
+    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="navMenu" aria-label="Open menu">
+      <span class="nav-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+    </button>
+    <ul class="nav-menu" id="navMenu">
+      <li><a href="/checksum-verifier">Checksum Verifier</a></li>
+      <li><a href="/qr-code-generator">QR Code Generator</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="wrap">
+  <div class="intro">
+    <div class="eyebrow">Runs locally &middot; nothing uploaded</div>
+    <h1>QR code generator</h1>
+    <p>Style the shape, colors, logo, and frame, then export it. The code is built and rendered on this page — your text never leaves your device.</p>
+  </div>
+
+  <div class="layout">
+    <div class="preview-col">
+      <div class="preview-panel">
+        <div class="preview-stage">
+          <div id="qr-preview-mount" role="img" aria-label="QR code preview"></div>
+        </div>
+        <p class="preview-status" id="preview-status" aria-live="polite"></p>
+
+        <div class="export-row">
+          <div class="field export-size">
+            <span class="label">Export size <small id="export-size-value">1024 px</small></span>
+            <input type="range" id="export-size" min="256" max="2048" step="64" value="1024">
+          </div>
+        </div>
+        <div class="export-buttons">
+          <button class="btn btn-primary" id="btn-download-png">Download PNG</button>
+          <button class="btn btn-ghost" id="btn-download-svg">Download SVG</button>
+          <button class="btn btn-ghost" id="btn-download-jpeg">Download JPEG</button>
+          <button class="btn btn-ghost" id="btn-download-webp">Download WebP</button>
+          <button class="btn btn-ghost" id="btn-copy">Copy image</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls-col">
+      <div class="presets" id="presets"></div>
+
+      <div class="panel">
+
+        <details class="section" open>
+          <summary>Content <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></summary>
+          <div class="section-body">
+            <div class="field">
+              <label class="label" for="data-input">Text or link</label>
+              <textarea id="data-input" spellcheck="false" placeholder="https://example.com"></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label class="label" for="ecc-level">Error correction</label>
+                <select id="ecc-level">
+                  <option value="L">Low (7%)</option>
+                  <option value="M" selected>Medium (15%)</option>
+                  <option value="Q">Quartile (25%)</option>
+                  <option value="H">High (30%)</option>
+                </select>
+              </div>
+              <div class="field">
+                <span class="label">Quiet zone <small id="margin-value">16 px</small></span>
+                <input type="range" id="margin" min="0" max="40" step="2" value="16">
+              </div>
+            </div>
+            <p class="help">Higher error correction survives more damage or a bigger logo, but makes the pattern denser. Quiet zone is the blank border scanners use to find the code — don't shrink it to zero if the code will be printed small.</p>
+          </div>
+        </details>
+
+        <details class="section">
+          <summary>Shape &amp; style <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></summary>
+          <div class="section-body">
+            <div class="field">
+              <span class="label">Dot style</span>
+              <select id="dots-type"></select>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <span class="label">Corner square</span>
+                <select id="corners-square-type"></select>
+              </div>
+              <div class="field">
+                <span class="label">Corner dot</span>
+                <select id="corners-dot-type"></select>
+              </div>
+            </div>
+            <div class="field">
+              <span class="label">Overall shape</span>
+              <div class="seg" id="body-shape" role="group" aria-label="Overall shape">
+                <button type="button" data-value="square" aria-pressed="true">Square</button>
+                <button type="button" data-value="circle" aria-pressed="false">Circle</button>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="section">
+          <summary>Colors <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></summary>
+          <div class="section-body" id="colors-body">
+            <!-- color groups injected by JS -->
+          </div>
+        </details>
+
+        <details class="section">
+          <summary>Logo <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></summary>
+          <div class="section-body">
+            <label class="upload-zone" id="upload-zone" for="logo-input">
+              <span class="logo-thumb" id="logo-thumb">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+              </span>
+              <span class="upload-copy">
+                <strong id="upload-label">Add a logo</strong>
+                <span>PNG or SVG with a transparent background works best</span>
+              </span>
+              <button type="button" class="logo-remove" id="logo-remove" hidden>Remove</button>
+              <input type="file" id="logo-input" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+            </label>
+
+            <div id="logo-options" style="display:flex; flex-direction:column; gap:0.95rem;">
+              <div class="field-row">
+                <div class="field">
+                  <span class="label">Size <small id="logo-size-value">22%</small></span>
+                  <input type="range" id="logo-size" min="10" max="40" step="1" value="22">
+                </div>
+                <div class="field">
+                  <span class="label">Padding <small id="logo-margin-value">6 px</small></span>
+                  <input type="range" id="logo-margin" min="0" max="24" step="1" value="6">
+                </div>
+              </div>
+              <div class="field">
+                <span class="label">Backing plate</span>
+                <div class="seg" id="logo-plate-shape" role="group" aria-label="Backing plate shape">
+                  <button type="button" data-value="none">None</button>
+                  <button type="button" data-value="square">Square</button>
+                  <button type="button" data-value="rounded" aria-pressed="true">Rounded</button>
+                  <button type="button" data-value="circle">Circle</button>
+                </div>
+              </div>
+              <div class="color-row" id="logo-plate-color-row">
+                <div class="field" style="flex:1">
+                  <span class="label">Plate color</span>
+                  <div class="color-field">
+                    <input type="color" id="logo-plate-color" value="#ffffff">
+                    <input type="text" id="logo-plate-color-text" value="#FFFFFF" maxlength="7">
+                  </div>
+                </div>
+                <div class="field" style="flex:1">
+                  <span class="label">Plate padding <small id="logo-plate-padding-value">8 px</small></span>
+                  <input type="range" id="logo-plate-padding" min="0" max="24" step="1" value="8">
+                </div>
+              </div>
+              <label class="checkline">
+                <input type="checkbox" id="logo-hide-dots" checked>
+                Hide the dots directly behind the logo
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="section">
+          <summary>Frame &amp; caption <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></summary>
+          <div class="section-body">
+            <div class="field">
+              <span class="label">Frame style</span>
+              <div class="seg" id="frame-style" role="group" aria-label="Frame style" style="grid-auto-flow: row; grid-template-columns: 1fr 1fr; display:grid;">
+                <button type="button" data-value="none" aria-pressed="true">None</button>
+                <button type="button" data-value="card">Card</button>
+                <button type="button" data-value="bar">Bottom bar</button>
+                <button type="button" data-value="ticket">Ticket</button>
+                <button type="button" data-value="tag">Asset tag</button>
+              </div>
+            </div>
+            <div id="frame-options" style="display:flex; flex-direction:column; gap:0.95rem;">
+              <div class="field">
+                <label class="label" for="frame-caption">Caption</label>
+                <input type="text" id="frame-caption" maxlength="40" placeholder="SCAN ME" value="SCAN ME">
+              </div>
+              <div class="color-row">
+                <div class="field" style="flex:1">
+                  <span class="label">Frame color</span>
+                  <div class="color-field">
+                    <input type="color" id="frame-color" value="#ffffff">
+                    <input type="text" id="frame-color-text" value="#FFFFFF" maxlength="7">
+                  </div>
+                </div>
+                <div class="field" style="flex:1">
+                  <span class="label">Accent color</span>
+                  <div class="color-field">
+                    <input type="color" id="frame-accent" value="#d97706">
+                    <input type="text" id="frame-accent-text" value="#D97706" maxlength="7">
+                  </div>
+                </div>
+                <div class="field" style="flex:1">
+                  <span class="label">Caption color</span>
+                  <div class="color-field">
+                    <input type="color" id="frame-text-color" value="#1a1712">
+                    <input type="text" id="frame-text-color-text" value="#1A1712" maxlength="7">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+      </div>
+
+      <div class="reset-row">
+        <button class="btn btn-ghost" id="btn-reset">Reset to defaults</button>
+        <span class="help" id="data-length-note"></span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p class="tool-disclaimer">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser.</p>
+  <p class="tool-disclaimer">This tool was built with the help of various AI agents, models, and platforms. Its code is <a href="https://github.com/shhosting/qr-code-generator">open source.</a></p>
+  <span class="footer-credit">
+    <span class="footer-group">&copy; 2026 shhosting.net &middot; <a href="mailto:contact@shhosting.net">contact@shhosting.net</a></span>
+    <span class="footer-group">&middot; Hosted on <a href="https://pages.github.com/">GitHub Pages</a> &middot; Built with <a href="https://claude.ai">Claude</a></span>
+  </span>
+</footer>
+
+<div class="copy-toast" id="copy-toast">Copied to clipboard</div>
+
+<script>
+/* qr-code-styling v1.9.2 — MIT License — vendored inline for offline use */
+!function(t,e){"object"==typeof exports&&"object"==typeof module?module.exports=e():"function"==typeof define&&define.amd?define([],e):"object"==typeof exports?exports.QRCodeStyling=e():t.QRCodeStyling=e()}(this,(()=>(()=>{var t={873:(t,e)=>{var i,r,n=function(){var t=function(t,e){var i=t,r=s[e],n=null,o=0,h=null,p=[],v={},m=function(t,e){n=function(t){for(var e=new Array(t),i=0;i<t;i+=1){e[i]=new Array(t);for(var r=0;r<t;r+=1)e[i][r]=null}return e}(o=4*i+17),b(0,0),b(o-7,0),b(0,o-7),x(),y(),C(t,e),i>=7&&S(t),null==h&&(h=M(i,r,p)),A(h,e)},b=function(t,e){for(var i=-1;i<=7;i+=1)if(!(t+i<=-1||o<=t+i))for(var r=-1;r<=7;r+=1)e+r<=-1||o<=e+r||(n[t+i][e+r]=0<=i&&i<=6&&(0==r||6==r)||0<=r&&r<=6&&(0==i||6==i)||2<=i&&i<=4&&2<=r&&r<=4)},y=function(){for(var t=8;t<o-8;t+=1)null==n[t][6]&&(n[t][6]=t%2==0);for(var e=8;e<o-8;e+=1)null==n[6][e]&&(n[6][e]=e%2==0)},x=function(){for(var t=a.getPatternPosition(i),e=0;e<t.length;e+=1)for(var r=0;r<t.length;r+=1){var o=t[e],s=t[r];if(null==n[o][s])for(var h=-2;h<=2;h+=1)for(var d=-2;d<=2;d+=1)n[o+h][s+d]=-2==h||2==h||-2==d||2==d||0==h&&0==d}},S=function(t){for(var e=a.getBCHTypeNumber(i),r=0;r<18;r+=1){var s=!t&&1==(e>>r&1);n[Math.floor(r/3)][r%3+o-8-3]=s}for(r=0;r<18;r+=1)s=!t&&1==(e>>r&1),n[r%3+o-8-3][Math.floor(r/3)]=s},C=function(t,e){for(var i=r<<3|e,s=a.getBCHTypeInfo(i),h=0;h<15;h+=1){var d=!t&&1==(s>>h&1);h<6?n[h][8]=d:h<8?n[h+1][8]=d:n[o-15+h][8]=d}for(h=0;h<15;h+=1)d=!t&&1==(s>>h&1),h<8?n[8][o-h-1]=d:h<9?n[8][15-h-1+1]=d:n[8][15-h-1]=d;n[o-8][8]=!t},A=function(t,e){for(var i=-1,r=o-1,s=7,h=0,d=a.getMaskFunction(e),u=o-1;u>0;u-=2)for(6==u&&(u-=1);;){for(var c=0;c<2;c+=1)if(null==n[r][u-c]){var l=!1;h<t.length&&(l=1==(t[h]>>>s&1)),d(r,u-c)&&(l=!l),n[r][u-c]=l,-1==(s-=1)&&(h+=1,s=7)}if((r+=i)<0||o<=r){r-=i,i=-i;break}}},M=function(t,e,i){for(var r=u.getRSBlocks(t,e),n=c(),o=0;o<i.length;o+=1){var s=i[o];n.put(s.getMode(),4),n.put(s.getLength(),a.getLengthInBits(s.getMode(),t)),s.write(n)}var h=0;for(o=0;o<r.length;o+=1)h+=r[o].dataCount;if(n.getLengthInBits()>8*h)throw"code length overflow. ("+n.getLengthInBits()+">"+8*h+")";for(n.getLengthInBits()+4<=8*h&&n.put(0,4);n.getLengthInBits()%8!=0;)n.putBit(!1);for(;!(n.getLengthInBits()>=8*h||(n.put(236,8),n.getLengthInBits()>=8*h));)n.put(17,8);return function(t,e){for(var i=0,r=0,n=0,o=new Array(e.length),s=new Array(e.length),h=0;h<e.length;h+=1){var u=e[h].dataCount,c=e[h].totalCount-u;r=Math.max(r,u),n=Math.max(n,c),o[h]=new Array(u);for(var l=0;l<o[h].length;l+=1)o[h][l]=255&t.getBuffer()[l+i];i+=u;var g=a.getErrorCorrectPolynomial(c),f=d(o[h],g.getLength()-1).mod(g);for(s[h]=new Array(g.getLength()-1),l=0;l<s[h].length;l+=1){var w=l+f.getLength()-s[h].length;s[h][l]=w>=0?f.getAt(w):0}}var p=0;for(l=0;l<e.length;l+=1)p+=e[l].totalCount;var v=new Array(p),_=0;for(l=0;l<r;l+=1)for(h=0;h<e.length;h+=1)l<o[h].length&&(v[_]=o[h][l],_+=1);for(l=0;l<n;l+=1)for(h=0;h<e.length;h+=1)l<s[h].length&&(v[_]=s[h][l],_+=1);return v}(n,r)};v.addData=function(t,e){var i=null;switch(e=e||"Byte"){case"Numeric":i=l(t);break;case"Alphanumeric":i=g(t);break;case"Byte":i=f(t);break;case"Kanji":i=w(t);break;default:throw"mode:"+e}p.push(i),h=null},v.isDark=function(t,e){if(t<0||o<=t||e<0||o<=e)throw t+","+e;return n[t][e]},v.getModuleCount=function(){return o},v.make=function(){if(i<1){for(var t=1;t<40;t++){for(var e=u.getRSBlocks(t,r),n=c(),o=0;o<p.length;o++){var s=p[o];n.put(s.getMode(),4),n.put(s.getLength(),a.getLengthInBits(s.getMode(),t)),s.write(n)}var h=0;for(o=0;o<e.length;o++)h+=e[o].dataCount;if(n.getLengthInBits()<=8*h)break}i=t}m(!1,function(){for(var t=0,e=0,i=0;i<8;i+=1){m(!0,i);var r=a.getLostPoint(v);(0==i||t>r)&&(t=r,e=i)}return e}())},v.createTableTag=function(t,e){t=t||2;var i="";i+='<table style="',i+=" border-width: 0px; border-style: none;",i+=" border-collapse: collapse;",i+=" padding: 0px; margin: "+(e=void 0===e?4*t:e)+"px;",i+='">',i+="<tbody>";for(var r=0;r<v.getModuleCount();r+=1){i+="<tr>";for(var n=0;n<v.getModuleCount();n+=1)i+='<td style="',i+=" border-width: 0px; border-style: none;",i+=" border-collapse: collapse;",i+=" padding: 0px; margin: 0px;",i+=" width: "+t+"px;",i+=" height: "+t+"px;",i+=" background-color: ",i+=v.isDark(r,n)?"#000000":"#ffffff",i+=";",i+='"/>';i+="</tr>"}return(i+="</tbody>")+"</table>"},v.createSvgTag=function(t,e,i,r){var n={};"object"==typeof arguments[0]&&(t=(n=arguments[0]).cellSize,e=n.margin,i=n.alt,r=n.title),t=t||2,e=void 0===e?4*t:e,(i="string"==typeof i?{text:i}:i||{}).text=i.text||null,i.id=i.text?i.id||"qrcode-description":null,(r="string"==typeof r?{text:r}:r||{}).text=r.text||null,r.id=r.text?r.id||"qrcode-title":null;var o,s,a,h,d=v.getModuleCount()*t+2*e,u="";for(h="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",u+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',u+=n.scalable?"":' width="'+d+'px" height="'+d+'px"',u+=' viewBox="0 0 '+d+" "+d+'" ',u+=' preserveAspectRatio="xMinYMin meet"',u+=r.text||i.text?' role="img" aria-labelledby="'+$([r.id,i.id].join(" ").trim())+'"':"",u+=">",u+=r.text?'<title id="'+$(r.id)+'">'+$(r.text)+"</title>":"",u+=i.text?'<description id="'+$(i.id)+'">'+$(i.text)+"</description>":"",u+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',u+='<path d="',s=0;s<v.getModuleCount();s+=1)for(a=s*t+e,o=0;o<v.getModuleCount();o+=1)v.isDark(s,o)&&(u+="M"+(o*t+e)+","+a+h);return(u+='" stroke="transparent" fill="black"/>')+"</svg>"},v.createDataURL=function(t,e){t=t||2,e=void 0===e?4*t:e;var i=v.getModuleCount()*t+2*e,r=e,n=i-e;return _(i,i,(function(e,i){if(r<=e&&e<n&&r<=i&&i<n){var o=Math.floor((e-r)/t),s=Math.floor((i-r)/t);return v.isDark(s,o)?0:1}return 1}))},v.createImgTag=function(t,e,i){t=t||2,e=void 0===e?4*t:e;var r=v.getModuleCount()*t+2*e,n="";return n+="<img",n+=' src="',n+=v.createDataURL(t,e),n+='"',n+=' width="',n+=r,n+='"',n+=' height="',n+=r,n+='"',i&&(n+=' alt="',n+=$(i),n+='"'),n+"/>"};var $=function(t){for(var e="",i=0;i<t.length;i+=1){var r=t.charAt(i);switch(r){case"<":e+="&lt;";break;case">":e+="&gt;";break;case"&":e+="&amp;";break;case'"':e+="&quot;";break;default:e+=r}}return e};return v.createASCII=function(t,e){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var e,i,r,n,o,s=1*v.getModuleCount()+2*t,a=t,h=s-t,d={"██":"█","█ ":"▀"," █":"▄","  ":" "},u={"██":"▀","█ ":"▀"," █":" ","  ":" "},c="";for(e=0;e<s;e+=2){for(r=Math.floor((e-a)/1),n=Math.floor((e+1-a)/1),i=0;i<s;i+=1)o="█",a<=i&&i<h&&a<=e&&e<h&&v.isDark(r,Math.floor((i-a)/1))&&(o=" "),a<=i&&i<h&&a<=e+1&&e+1<h&&v.isDark(n,Math.floor((i-a)/1))?o+=" ":o+="█",c+=t<1&&e+1>=h?u[o]:d[o];c+="\n"}return s%2&&t>0?c.substring(0,c.length-s-1)+Array(s+1).join("▀"):c.substring(0,c.length-1)}(e);t-=1,e=void 0===e?2*t:e;var i,r,n,o,s=v.getModuleCount()*t+2*e,a=e,h=s-e,d=Array(t+1).join("██"),u=Array(t+1).join("  "),c="",l="";for(i=0;i<s;i+=1){for(n=Math.floor((i-a)/t),l="",r=0;r<s;r+=1)o=1,a<=r&&r<h&&a<=i&&i<h&&v.isDark(n,Math.floor((r-a)/t))&&(o=0),l+=o?d:u;for(n=0;n<t;n+=1)c+=l+"\n"}return c.substring(0,c.length-1)},v.renderTo2dContext=function(t,e){e=e||2;for(var i=v.getModuleCount(),r=0;r<i;r++)for(var n=0;n<i;n++)t.fillStyle=v.isDark(r,n)?"black":"white",t.fillRect(r*e,n*e,e,e)},v};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var e=[],i=0;i<t.length;i+=1){var r=t.charCodeAt(i);e.push(255&r)}return e}}).default,t.createStringToBytes=function(t,e){var i=function(){for(var i=v(t),r=function(){var t=i.read();if(-1==t)throw"eof";return t},n=0,o={};;){var s=i.read();if(-1==s)break;var a=r(),h=r()<<8|r();o[String.fromCharCode(s<<8|a)]=h,n+=1}if(n!=e)throw n+" != "+e;return o}(),r="?".charCodeAt(0);return function(t){for(var e=[],n=0;n<t.length;n+=1){var o=t.charCodeAt(n);if(o<128)e.push(o);else{var s=i[t.charAt(n)];"number"==typeof s?(255&s)==s?e.push(s):(e.push(s>>>8),e.push(255&s)):e.push(r)}}return e}};var e,i,r,n,o,s={L:1,M:0,Q:3,H:2},a=(e=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],i=1335,r=7973,o=function(t){for(var e=0;0!=t;)e+=1,t>>>=1;return e},(n={}).getBCHTypeInfo=function(t){for(var e=t<<10;o(e)-o(i)>=0;)e^=i<<o(e)-o(i);return 21522^(t<<10|e)},n.getBCHTypeNumber=function(t){for(var e=t<<12;o(e)-o(r)>=0;)e^=r<<o(e)-o(r);return t<<12|e},n.getPatternPosition=function(t){return e[t-1]},n.getMaskFunction=function(t){switch(t){case 0:return function(t,e){return(t+e)%2==0};case 1:return function(t,e){return t%2==0};case 2:return function(t,e){return e%3==0};case 3:return function(t,e){return(t+e)%3==0};case 4:return function(t,e){return(Math.floor(t/2)+Math.floor(e/3))%2==0};case 5:return function(t,e){return t*e%2+t*e%3==0};case 6:return function(t,e){return(t*e%2+t*e%3)%2==0};case 7:return function(t,e){return(t*e%3+(t+e)%2)%2==0};default:throw"bad maskPattern:"+t}},n.getErrorCorrectPolynomial=function(t){for(var e=d([1],0),i=0;i<t;i+=1)e=e.multiply(d([1,h.gexp(i)],0));return e},n.getLengthInBits=function(t,e){if(1<=e&&e<10)switch(t){case 1:return 10;case 2:return 9;case 4:case 8:return 8;default:throw"mode:"+t}else if(e<27)switch(t){case 1:return 12;case 2:return 11;case 4:return 16;case 8:return 10;default:throw"mode:"+t}else{if(!(e<41))throw"type:"+e;switch(t){case 1:return 14;case 2:return 13;case 4:return 16;case 8:return 12;default:throw"mode:"+t}}},n.getLostPoint=function(t){for(var e=t.getModuleCount(),i=0,r=0;r<e;r+=1)for(var n=0;n<e;n+=1){for(var o=0,s=t.isDark(r,n),a=-1;a<=1;a+=1)if(!(r+a<0||e<=r+a))for(var h=-1;h<=1;h+=1)n+h<0||e<=n+h||0==a&&0==h||s==t.isDark(r+a,n+h)&&(o+=1);o>5&&(i+=3+o-5)}for(r=0;r<e-1;r+=1)for(n=0;n<e-1;n+=1){var d=0;t.isDark(r,n)&&(d+=1),t.isDark(r+1,n)&&(d+=1),t.isDark(r,n+1)&&(d+=1),t.isDark(r+1,n+1)&&(d+=1),0!=d&&4!=d||(i+=3)}for(r=0;r<e;r+=1)for(n=0;n<e-6;n+=1)t.isDark(r,n)&&!t.isDark(r,n+1)&&t.isDark(r,n+2)&&t.isDark(r,n+3)&&t.isDark(r,n+4)&&!t.isDark(r,n+5)&&t.isDark(r,n+6)&&(i+=40);for(n=0;n<e;n+=1)for(r=0;r<e-6;r+=1)t.isDark(r,n)&&!t.isDark(r+1,n)&&t.isDark(r+2,n)&&t.isDark(r+3,n)&&t.isDark(r+4,n)&&!t.isDark(r+5,n)&&t.isDark(r+6,n)&&(i+=40);var u=0;for(n=0;n<e;n+=1)for(r=0;r<e;r+=1)t.isDark(r,n)&&(u+=1);return i+Math.abs(100*u/e/e-50)/5*10},n),h=function(){for(var t=new Array(256),e=new Array(256),i=0;i<8;i+=1)t[i]=1<<i;for(i=8;i<256;i+=1)t[i]=t[i-4]^t[i-5]^t[i-6]^t[i-8];for(i=0;i<255;i+=1)e[t[i]]=i;return{glog:function(t){if(t<1)throw"glog("+t+")";return e[t]},gexp:function(e){for(;e<0;)e+=255;for(;e>=256;)e-=255;return t[e]}}}();function d(t,e){if(void 0===t.length)throw t.length+"/"+e;var i=function(){for(var i=0;i<t.length&&0==t[i];)i+=1;for(var r=new Array(t.length-i+e),n=0;n<t.length-i;n+=1)r[n]=t[n+i];return r}(),r={getAt:function(t){return i[t]},getLength:function(){return i.length},multiply:function(t){for(var e=new Array(r.getLength()+t.getLength()-1),i=0;i<r.getLength();i+=1)for(var n=0;n<t.getLength();n+=1)e[i+n]^=h.gexp(h.glog(r.getAt(i))+h.glog(t.getAt(n)));return d(e,0)},mod:function(t){if(r.getLength()-t.getLength()<0)return r;for(var e=h.glog(r.getAt(0))-h.glog(t.getAt(0)),i=new Array(r.getLength()),n=0;n<r.getLength();n+=1)i[n]=r.getAt(n);for(n=0;n<t.getLength();n+=1)i[n]^=h.gexp(h.glog(t.getAt(n))+e);return d(i,0).mod(t)}};return r}var u=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],e=function(t,e){var i={};return i.totalCount=t,i.dataCount=e,i},i={getRSBlocks:function(i,r){var n=function(e,i){switch(i){case s.L:return t[4*(e-1)+0];case s.M:return t[4*(e-1)+1];case s.Q:return t[4*(e-1)+2];case s.H:return t[4*(e-1)+3];default:return}}(i,r);if(void 0===n)throw"bad rs block @ typeNumber:"+i+"/errorCorrectionLevel:"+r;for(var o=n.length/3,a=[],h=0;h<o;h+=1)for(var d=n[3*h+0],u=n[3*h+1],c=n[3*h+2],l=0;l<d;l+=1)a.push(e(u,c));return a}};return i}(),c=function(){var t=[],e=0,i={getBuffer:function(){return t},getAt:function(e){var i=Math.floor(e/8);return 1==(t[i]>>>7-e%8&1)},put:function(t,e){for(var r=0;r<e;r+=1)i.putBit(1==(t>>>e-r-1&1))},getLengthInBits:function(){return e},putBit:function(i){var r=Math.floor(e/8);t.length<=r&&t.push(0),i&&(t[r]|=128>>>e%8),e+=1}};return i},l=function(t){var e=t,i={getMode:function(){return 1},getLength:function(t){return e.length},write:function(t){for(var i=e,n=0;n+2<i.length;)t.put(r(i.substring(n,n+3)),10),n+=3;n<i.length&&(i.length-n==1?t.put(r(i.substring(n,n+1)),4):i.length-n==2&&t.put(r(i.substring(n,n+2)),7))}},r=function(t){for(var e=0,i=0;i<t.length;i+=1)e=10*e+n(t.charAt(i));return e},n=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return i},g=function(t){var e=t,i={getMode:function(){return 2},getLength:function(t){return e.length},write:function(t){for(var i=e,n=0;n+1<i.length;)t.put(45*r(i.charAt(n))+r(i.charAt(n+1)),11),n+=2;n<i.length&&t.put(r(i.charAt(n)),6)}},r=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return i},f=function(e){var i=t.stringToBytes(e);return{getMode:function(){return 4},getLength:function(t){return i.length},write:function(t){for(var e=0;e<i.length;e+=1)t.put(i[e],8)}}},w=function(e){var i=t.stringToBytesFuncs.SJIS;if(!i)throw"sjis not supported.";!function(){var t=i("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var r=i(e),n={getMode:function(){return 8},getLength:function(t){return~~(r.length/2)},write:function(t){for(var e=r,i=0;i+1<e.length;){var n=(255&e[i])<<8|255&e[i+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(i+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),i+=2}if(i<e.length)throw"illegal char at "+(i+1)}};return n},p=function(){var t=[],e={writeByte:function(e){t.push(255&e)},writeShort:function(t){e.writeByte(t),e.writeByte(t>>>8)},writeBytes:function(t,i,r){i=i||0,r=r||t.length;for(var n=0;n<r;n+=1)e.writeByte(t[n+i])},writeString:function(t){for(var i=0;i<t.length;i+=1)e.writeByte(t.charCodeAt(i))},toByteArray:function(){return t},toString:function(){var e="";e+="[";for(var i=0;i<t.length;i+=1)i>0&&(e+=","),e+=t[i];return e+"]"}};return e},v=function(t){var e=t,i=0,r=0,n=0,o={read:function(){for(;n<8;){if(i>=e.length){if(0==n)return-1;throw"unexpected end of file./"+n}var t=e.charAt(i);if(i+=1,"="==t)return n=0,-1;t.match(/^\s$/)||(r=r<<6|s(t.charCodeAt(0)),n+=6)}var o=r>>>n-8&255;return n-=8,o}},s=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return o},_=function(t,e,i){for(var r=function(t,e){var i=t,r=e,n=new Array(t*e),o={setPixel:function(t,e,r){n[e*i+t]=r},write:function(t){t.writeString("GIF87a"),t.writeShort(i),t.writeShort(r),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(i),t.writeShort(r),t.writeByte(0);var e=s(2);t.writeByte(2);for(var n=0;e.length-n>255;)t.writeByte(255),t.writeBytes(e,n,255),n+=255;t.writeByte(e.length-n),t.writeBytes(e,n,e.length-n),t.writeByte(0),t.writeString(";")}},s=function(t){for(var e=1<<t,i=1+(1<<t),r=t+1,o=a(),s=0;s<e;s+=1)o.add(String.fromCharCode(s));o.add(String.fromCharCode(e)),o.add(String.fromCharCode(i));var h,d,u,c=p(),l=(h=c,d=0,u=0,{write:function(t,e){if(t>>>e!=0)throw"length over";for(;d+e>=8;)h.writeByte(255&(t<<d|u)),e-=8-d,t>>>=8-d,u=0,d=0;u|=t<<d,d+=e},flush:function(){d>0&&h.writeByte(u)}});l.write(e,r);var g=0,f=String.fromCharCode(n[g]);for(g+=1;g<n.length;){var w=String.fromCharCode(n[g]);g+=1,o.contains(f+w)?f+=w:(l.write(o.indexOf(f),r),o.size()<4095&&(o.size()==1<<r&&(r+=1),o.add(f+w)),f=w)}return l.write(o.indexOf(f),r),l.write(i,r),l.flush(),c.toByteArray()},a=function(){var t={},e=0,i={add:function(r){if(i.contains(r))throw"dup key:"+r;t[r]=e,e+=1},size:function(){return e},indexOf:function(e){return t[e]},contains:function(e){return void 0!==t[e]}};return i};return o}(t,e),n=0;n<e;n+=1)for(var o=0;o<t;o+=1)r.setPixel(o,n,i(o,n));var s=p();r.write(s);for(var a=function(){var t=0,e=0,i=0,r="",n={},o=function(t){r+=String.fromCharCode(s(63&t))},s=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return n.writeByte=function(r){for(t=t<<8|255&r,e+=8,i+=1;e>=6;)o(t>>>e-6),e-=6},n.flush=function(){if(e>0&&(o(t<<6-e),t=0,e=0),i%3!=0)for(var n=3-i%3,s=0;s<n;s+=1)r+="="},n.toString=function(){return r},n}(),h=s.toByteArray(),d=0;d<h.length;d+=1)a.writeByte(h[d]);return a.flush(),"data:image/gif;base64,"+a};return t}();n.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var e=[],i=0;i<t.length;i++){var r=t.charCodeAt(i);r<128?e.push(r):r<2048?e.push(192|r>>6,128|63&r):r<55296||r>=57344?e.push(224|r>>12,128|r>>6&63,128|63&r):(i++,r=65536+((1023&r)<<10|1023&t.charCodeAt(i)),e.push(240|r>>18,128|r>>12&63,128|r>>6&63,128|63&r))}return e}(t)},void 0===(r="function"==typeof(i=function(){return n})?i.apply(e,[]):i)||(t.exports=r)}},e={};function i(r){var n=e[r];if(void 0!==n)return n.exports;var o=e[r]={exports:{}};return t[r](o,o.exports,i),o.exports}i.n=t=>{var e=t&&t.__esModule?()=>t.default:()=>t;return i.d(e,{a:e}),e},i.d=(t,e)=>{for(var r in e)i.o(e,r)&&!i.o(t,r)&&Object.defineProperty(t,r,{enumerable:!0,get:e[r]})},i.o=(t,e)=>Object.prototype.hasOwnProperty.call(t,e);var r={};return(()=>{"use strict";i.d(r,{default:()=>$});const t=t=>!!t&&"object"==typeof t&&!Array.isArray(t);function e(i,...r){if(!r.length)return i;const n=r.shift();return void 0!==n&&t(i)&&t(n)?(i=Object.assign({},i),Object.keys(n).forEach((r=>{const o=i[r],s=n[r];Array.isArray(o)&&Array.isArray(s)?i[r]=s:t(o)&&t(s)?i[r]=e(Object.assign({},o),s):i[r]=s})),e(i,...r)):i}function n(t,e){const i=document.createElement("a");i.download=e,i.href=t,document.body.appendChild(i),i.click(),document.body.removeChild(i)}const o={L:.07,M:.15,Q:.25,H:.3};class s{constructor({svg:t,type:e,window:i}){this._svg=t,this._type=e,this._window=i}draw(t,e,i,r){let n;switch(this._type){case"dots":n=this._drawDot;break;case"classy":n=this._drawClassy;break;case"classy-rounded":n=this._drawClassyRounded;break;case"rounded":n=this._drawRounded;break;case"extra-rounded":n=this._drawExtraRounded;break;default:n=this._drawSquare}n.call(this,{x:t,y:e,size:i,getNeighbor:r})}_rotateFigure({x:t,y:e,size:i,rotation:r=0,draw:n}){var o;const s=t+i/2,a=e+i/2;n(),null===(o=this._element)||void 0===o||o.setAttribute("transform",`rotate(${180*r/Math.PI},${s},${a})`)}_basicDot(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","circle"),this._element.setAttribute("cx",String(i+e/2)),this._element.setAttribute("cy",String(r+e/2)),this._element.setAttribute("r",String(e/2))}}))}_basicSquare(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","rect"),this._element.setAttribute("x",String(i)),this._element.setAttribute("y",String(r)),this._element.setAttribute("width",String(e)),this._element.setAttribute("height",String(e))}}))}_basicSideRounded(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","path"),this._element.setAttribute("d",`M ${i} ${r}v ${e}h `+e/2+`a ${e/2} ${e/2}, 0, 0, 0, 0 ${-e}`)}}))}_basicCornerRounded(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","path"),this._element.setAttribute("d",`M ${i} ${r}v ${e}h ${e}v `+-e/2+`a ${e/2} ${e/2}, 0, 0, 0, ${-e/2} ${-e/2}`)}}))}_basicCornerExtraRounded(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","path"),this._element.setAttribute("d",`M ${i} ${r}v ${e}h ${e}a ${e} ${e}, 0, 0, 0, ${-e} ${-e}`)}}))}_basicCornersRounded(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","path"),this._element.setAttribute("d",`M ${i} ${r}v `+e/2+`a ${e/2} ${e/2}, 0, 0, 0, ${e/2} ${e/2}h `+e/2+"v "+-e/2+`a ${e/2} ${e/2}, 0, 0, 0, ${-e/2} ${-e/2}`)}}))}_drawDot({x:t,y:e,size:i}){this._basicDot({x:t,y:e,size:i,rotation:0})}_drawSquare({x:t,y:e,size:i}){this._basicSquare({x:t,y:e,size:i,rotation:0})}_drawRounded({x:t,y:e,size:i,getNeighbor:r}){const n=r?+r(-1,0):0,o=r?+r(1,0):0,s=r?+r(0,-1):0,a=r?+r(0,1):0,h=n+o+s+a;if(0!==h)if(h>2||n&&o||s&&a)this._basicSquare({x:t,y:e,size:i,rotation:0});else{if(2===h){let r=0;return n&&s?r=Math.PI/2:s&&o?r=Math.PI:o&&a&&(r=-Math.PI/2),void this._basicCornerRounded({x:t,y:e,size:i,rotation:r})}if(1===h){let r=0;return s?r=Math.PI/2:o?r=Math.PI:a&&(r=-Math.PI/2),void this._basicSideRounded({x:t,y:e,size:i,rotation:r})}}else this._basicDot({x:t,y:e,size:i,rotation:0})}_drawExtraRounded({x:t,y:e,size:i,getNeighbor:r}){const n=r?+r(-1,0):0,o=r?+r(1,0):0,s=r?+r(0,-1):0,a=r?+r(0,1):0,h=n+o+s+a;if(0!==h)if(h>2||n&&o||s&&a)this._basicSquare({x:t,y:e,size:i,rotation:0});else{if(2===h){let r=0;return n&&s?r=Math.PI/2:s&&o?r=Math.PI:o&&a&&(r=-Math.PI/2),void this._basicCornerExtraRounded({x:t,y:e,size:i,rotation:r})}if(1===h){let r=0;return s?r=Math.PI/2:o?r=Math.PI:a&&(r=-Math.PI/2),void this._basicSideRounded({x:t,y:e,size:i,rotation:r})}}else this._basicDot({x:t,y:e,size:i,rotation:0})}_drawClassy({x:t,y:e,size:i,getNeighbor:r}){const n=r?+r(-1,0):0,o=r?+r(1,0):0,s=r?+r(0,-1):0,a=r?+r(0,1):0;0!==n+o+s+a?n||s?o||a?this._basicSquare({x:t,y:e,size:i,rotation:0}):this._basicCornerRounded({x:t,y:e,size:i,rotation:Math.PI/2}):this._basicCornerRounded({x:t,y:e,size:i,rotation:-Math.PI/2}):this._basicCornersRounded({x:t,y:e,size:i,rotation:Math.PI/2})}_drawClassyRounded({x:t,y:e,size:i,getNeighbor:r}){const n=r?+r(-1,0):0,o=r?+r(1,0):0,s=r?+r(0,-1):0,a=r?+r(0,1):0;0!==n+o+s+a?n||s?o||a?this._basicSquare({x:t,y:e,size:i,rotation:0}):this._basicCornerExtraRounded({x:t,y:e,size:i,rotation:Math.PI/2}):this._basicCornerExtraRounded({x:t,y:e,size:i,rotation:-Math.PI/2}):this._basicCornersRounded({x:t,y:e,size:i,rotation:Math.PI/2})}}const a={dot:"dot",square:"square",extraRounded:"extra-rounded"},h=Object.values(a);class d{constructor({svg:t,type:e,window:i}){this._svg=t,this._type=e,this._window=i}draw(t,e,i,r){let n;switch(this._type){case a.square:n=this._drawSquare;break;case a.extraRounded:n=this._drawExtraRounded;break;default:n=this._drawDot}n.call(this,{x:t,y:e,size:i,rotation:r})}_rotateFigure({x:t,y:e,size:i,rotation:r=0,draw:n}){var o;const s=t+i/2,a=e+i/2;n(),null===(o=this._element)||void 0===o||o.setAttribute("transform",`rotate(${180*r/Math.PI},${s},${a})`)}_basicDot(t){const{size:e,x:i,y:r}=t,n=e/7;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","path"),this._element.setAttribute("clip-rule","evenodd"),this._element.setAttribute("d",`M ${i+e/2} ${r}a ${e/2} ${e/2} 0 1 0 0.1 0zm 0 ${n}a ${e/2-n} ${e/2-n} 0 1 1 -0.1 0Z`)}}))}_basicSquare(t){const{size:e,x:i,y:r}=t,n=e/7;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","path"),this._element.setAttribute("clip-rule","evenodd"),this._element.setAttribute("d",`M ${i} ${r}v ${e}h ${e}v `+-e+"z"+`M ${i+n} ${r+n}h `+(e-2*n)+"v "+(e-2*n)+"h "+(2*n-e)+"z")}}))}_basicExtraRounded(t){const{size:e,x:i,y:r}=t,n=e/7;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","path"),this._element.setAttribute("clip-rule","evenodd"),this._element.setAttribute("d",`M ${i} ${r+2.5*n}v `+2*n+`a ${2.5*n} ${2.5*n}, 0, 0, 0, ${2.5*n} ${2.5*n}h `+2*n+`a ${2.5*n} ${2.5*n}, 0, 0, 0, ${2.5*n} ${2.5*-n}v `+-2*n+`a ${2.5*n} ${2.5*n}, 0, 0, 0, ${2.5*-n} ${2.5*-n}h `+-2*n+`a ${2.5*n} ${2.5*n}, 0, 0, 0, ${2.5*-n} ${2.5*n}`+`M ${i+2.5*n} ${r+n}h `+2*n+`a ${1.5*n} ${1.5*n}, 0, 0, 1, ${1.5*n} ${1.5*n}v `+2*n+`a ${1.5*n} ${1.5*n}, 0, 0, 1, ${1.5*-n} ${1.5*n}h `+-2*n+`a ${1.5*n} ${1.5*n}, 0, 0, 1, ${1.5*-n} ${1.5*-n}v `+-2*n+`a ${1.5*n} ${1.5*n}, 0, 0, 1, ${1.5*n} ${1.5*-n}`)}}))}_drawDot({x:t,y:e,size:i,rotation:r}){this._basicDot({x:t,y:e,size:i,rotation:r})}_drawSquare({x:t,y:e,size:i,rotation:r}){this._basicSquare({x:t,y:e,size:i,rotation:r})}_drawExtraRounded({x:t,y:e,size:i,rotation:r}){this._basicExtraRounded({x:t,y:e,size:i,rotation:r})}}const u={dot:"dot",square:"square"},c=Object.values(u);class l{constructor({svg:t,type:e,window:i}){this._svg=t,this._type=e,this._window=i}draw(t,e,i,r){let n;n=this._type===u.square?this._drawSquare:this._drawDot,n.call(this,{x:t,y:e,size:i,rotation:r})}_rotateFigure({x:t,y:e,size:i,rotation:r=0,draw:n}){var o;const s=t+i/2,a=e+i/2;n(),null===(o=this._element)||void 0===o||o.setAttribute("transform",`rotate(${180*r/Math.PI},${s},${a})`)}_basicDot(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","circle"),this._element.setAttribute("cx",String(i+e/2)),this._element.setAttribute("cy",String(r+e/2)),this._element.setAttribute("r",String(e/2))}}))}_basicSquare(t){const{size:e,x:i,y:r}=t;this._rotateFigure(Object.assign(Object.assign({},t),{draw:()=>{this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","rect"),this._element.setAttribute("x",String(i)),this._element.setAttribute("y",String(r)),this._element.setAttribute("width",String(e)),this._element.setAttribute("height",String(e))}}))}_drawDot({x:t,y:e,size:i,rotation:r}){this._basicDot({x:t,y:e,size:i,rotation:r})}_drawSquare({x:t,y:e,size:i,rotation:r}){this._basicSquare({x:t,y:e,size:i,rotation:r})}}const g="circle",f=[[1,1,1,1,1,1,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,1,1,1,1,1,1]],w=[[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,1,1,1,0,0],[0,0,1,1,1,0,0],[0,0,1,1,1,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]];class p{constructor(t,e){this._roundSize=t=>this._options.dotsOptions.roundSize?Math.floor(t):t,this._window=e,this._element=this._window.document.createElementNS("http://www.w3.org/2000/svg","svg"),this._element.setAttribute("width",String(t.width)),this._element.setAttribute("height",String(t.height)),this._element.setAttribute("xmlns:xlink","http://www.w3.org/1999/xlink"),t.dotsOptions.roundSize||this._element.setAttribute("shape-rendering","crispEdges"),this._element.setAttribute("viewBox",`0 0 ${t.width} ${t.height}`),this._defs=this._window.document.createElementNS("http://www.w3.org/2000/svg","defs"),this._element.appendChild(this._defs),this._imageUri=t.image,this._instanceId=p.instanceCount++,this._options=t}get width(){return this._options.width}get height(){return this._options.height}getElement(){return this._element}async drawQR(t){const e=t.getModuleCount(),i=Math.min(this._options.width,this._options.height)-2*this._options.margin,r=this._options.shape===g?i/Math.sqrt(2):i,n=this._roundSize(r/e);let s={hideXDots:0,hideYDots:0,width:0,height:0};if(this._qr=t,this._options.image){if(await this.loadImage(),!this._image)return;const{imageOptions:t,qrOptions:i}=this._options,r=t.imageSize*o[i.errorCorrectionLevel],a=Math.floor(r*e*e);s=function({originalHeight:t,originalWidth:e,maxHiddenDots:i,maxHiddenAxisDots:r,dotSize:n}){const o={x:0,y:0},s={x:0,y:0};if(t<=0||e<=0||i<=0||n<=0)return{height:0,width:0,hideYDots:0,hideXDots:0};const a=t/e;return o.x=Math.floor(Math.sqrt(i/a)),o.x<=0&&(o.x=1),r&&r<o.x&&(o.x=r),o.x%2==0&&o.x--,s.x=o.x*n,o.y=1+2*Math.ceil((o.x*a-1)/2),s.y=Math.round(s.x*a),(o.y*o.x>i||r&&r<o.y)&&(r&&r<o.y?(o.y=r,o.y%2==0&&o.x--):o.y-=2,s.y=o.y*n,o.x=1+2*Math.ceil((o.y/a-1)/2),s.x=Math.round(s.y/a)),{height:s.y,width:s.x,hideYDots:o.y,hideXDots:o.x}}({originalWidth:this._image.width,originalHeight:this._image.height,maxHiddenDots:a,maxHiddenAxisDots:e-14,dotSize:n})}this.drawBackground(),this.drawDots(((t,i)=>{var r,n,o,a,h,d;return!(this._options.imageOptions.hideBackgroundDots&&t>=(e-s.hideYDots)/2&&t<(e+s.hideYDots)/2&&i>=(e-s.hideXDots)/2&&i<(e+s.hideXDots)/2||(null===(r=f[t])||void 0===r?void 0:r[i])||(null===(n=f[t-e+7])||void 0===n?void 0:n[i])||(null===(o=f[t])||void 0===o?void 0:o[i-e+7])||(null===(a=w[t])||void 0===a?void 0:a[i])||(null===(h=w[t-e+7])||void 0===h?void 0:h[i])||(null===(d=w[t])||void 0===d?void 0:d[i-e+7]))})),this.drawCorners(),this._options.image&&await this.drawImage({width:s.width,height:s.height,count:e,dotSize:n})}drawBackground(){var t,e,i;const r=this._element,n=this._options;if(r){const r=null===(t=n.backgroundOptions)||void 0===t?void 0:t.gradient,o=null===(e=n.backgroundOptions)||void 0===e?void 0:e.color;let s=n.height,a=n.width;if(r||o){const t=this._window.document.createElementNS("http://www.w3.org/2000/svg","rect");this._backgroundClipPath=this._window.document.createElementNS("http://www.w3.org/2000/svg","clipPath"),this._backgroundClipPath.setAttribute("id",`clip-path-background-color-${this._instanceId}`),this._defs.appendChild(this._backgroundClipPath),(null===(i=n.backgroundOptions)||void 0===i?void 0:i.round)&&(s=a=Math.min(n.width,n.height),t.setAttribute("rx",String(s/2*n.backgroundOptions.round))),t.setAttribute("x",String(this._roundSize((n.width-a)/2))),t.setAttribute("y",String(this._roundSize((n.height-s)/2))),t.setAttribute("width",String(a)),t.setAttribute("height",String(s)),this._backgroundClipPath.appendChild(t),this._createColor({options:r,color:o,additionalRotation:0,x:0,y:0,height:n.height,width:n.width,name:`background-color-${this._instanceId}`})}}}drawDots(t){var e,i;if(!this._qr)throw"QR code is not defined";const r=this._options,n=this._qr.getModuleCount();if(n>r.width||n>r.height)throw"The canvas is too small.";const o=Math.min(r.width,r.height)-2*r.margin,a=r.shape===g?o/Math.sqrt(2):o,h=this._roundSize(a/n),d=this._roundSize((r.width-n*h)/2),u=this._roundSize((r.height-n*h)/2),c=new s({svg:this._element,type:r.dotsOptions.type,window:this._window});this._dotsClipPath=this._window.document.createElementNS("http://www.w3.org/2000/svg","clipPath"),this._dotsClipPath.setAttribute("id",`clip-path-dot-color-${this._instanceId}`),this._defs.appendChild(this._dotsClipPath),this._createColor({options:null===(e=r.dotsOptions)||void 0===e?void 0:e.gradient,color:r.dotsOptions.color,additionalRotation:0,x:0,y:0,height:r.height,width:r.width,name:`dot-color-${this._instanceId}`});for(let e=0;e<n;e++)for(let r=0;r<n;r++)t&&!t(e,r)||(null===(i=this._qr)||void 0===i?void 0:i.isDark(e,r))&&(c.draw(d+r*h,u+e*h,h,((i,o)=>!(r+i<0||e+o<0||r+i>=n||e+o>=n)&&!(t&&!t(e+o,r+i))&&!!this._qr&&this._qr.isDark(e+o,r+i))),c._element&&this._dotsClipPath&&this._dotsClipPath.appendChild(c._element));if(r.shape===g){const t=this._roundSize((o/h-n)/2),e=n+2*t,i=d-t*h,r=u-t*h,s=[],a=this._roundSize(e/2);for(let i=0;i<e;i++){s[i]=[];for(let r=0;r<e;r++)i>=t-1&&i<=e-t&&r>=t-1&&r<=e-t||Math.sqrt((i-a)*(i-a)+(r-a)*(r-a))>a?s[i][r]=0:s[i][r]=this._qr.isDark(r-2*t<0?r:r>=n?r-2*t:r-t,i-2*t<0?i:i>=n?i-2*t:i-t)?1:0}for(let t=0;t<e;t++)for(let n=0;n<e;n++)s[t][n]&&(c.draw(i+n*h,r+t*h,h,((e,i)=>{var r;return!!(null===(r=s[t+i])||void 0===r?void 0:r[n+e])})),c._element&&this._dotsClipPath&&this._dotsClipPath.appendChild(c._element))}}drawCorners(){if(!this._qr)throw"QR code is not defined";const t=this._element,e=this._options;if(!t)throw"Element code is not defined";const i=this._qr.getModuleCount(),r=Math.min(e.width,e.height)-2*e.margin,n=e.shape===g?r/Math.sqrt(2):r,o=this._roundSize(n/i),a=7*o,u=3*o,p=this._roundSize((e.width-i*o)/2),v=this._roundSize((e.height-i*o)/2);[[0,0,0],[1,0,Math.PI/2],[0,1,-Math.PI/2]].forEach((([t,r,n])=>{var g,_,m,b,y,x,S,C,A,M,$,O,D,k;const z=p+t*o*(i-7),B=v+r*o*(i-7);let P=this._dotsClipPath,I=this._dotsClipPath;if(((null===(g=e.cornersSquareOptions)||void 0===g?void 0:g.gradient)||(null===(_=e.cornersSquareOptions)||void 0===_?void 0:_.color))&&(P=this._window.document.createElementNS("http://www.w3.org/2000/svg","clipPath"),P.setAttribute("id",`clip-path-corners-square-color-${t}-${r}-${this._instanceId}`),this._defs.appendChild(P),this._cornersSquareClipPath=this._cornersDotClipPath=I=P,this._createColor({options:null===(m=e.cornersSquareOptions)||void 0===m?void 0:m.gradient,color:null===(b=e.cornersSquareOptions)||void 0===b?void 0:b.color,additionalRotation:n,x:z,y:B,height:a,width:a,name:`corners-square-color-${t}-${r}-${this._instanceId}`})),(null===(y=e.cornersSquareOptions)||void 0===y?void 0:y.type)&&h.includes(e.cornersSquareOptions.type)){const t=new d({svg:this._element,type:e.cornersSquareOptions.type,window:this._window});t.draw(z,B,a,n),t._element&&P&&P.appendChild(t._element)}else{const t=new s({svg:this._element,type:(null===(x=e.cornersSquareOptions)||void 0===x?void 0:x.type)||e.dotsOptions.type,window:this._window});for(let e=0;e<f.length;e++)for(let i=0;i<f[e].length;i++)(null===(S=f[e])||void 0===S?void 0:S[i])&&(t.draw(z+i*o,B+e*o,o,((t,r)=>{var n;return!!(null===(n=f[e+r])||void 0===n?void 0:n[i+t])})),t._element&&P&&P.appendChild(t._element))}if(((null===(C=e.cornersDotOptions)||void 0===C?void 0:C.gradient)||(null===(A=e.cornersDotOptions)||void 0===A?void 0:A.color))&&(I=this._window.document.createElementNS("http://www.w3.org/2000/svg","clipPath"),I.setAttribute("id",`clip-path-corners-dot-color-${t}-${r}-${this._instanceId}`),this._defs.appendChild(I),this._cornersDotClipPath=I,this._createColor({options:null===(M=e.cornersDotOptions)||void 0===M?void 0:M.gradient,color:null===($=e.cornersDotOptions)||void 0===$?void 0:$.color,additionalRotation:n,x:z+2*o,y:B+2*o,height:u,width:u,name:`corners-dot-color-${t}-${r}-${this._instanceId}`})),(null===(O=e.cornersDotOptions)||void 0===O?void 0:O.type)&&c.includes(e.cornersDotOptions.type)){const t=new l({svg:this._element,type:e.cornersDotOptions.type,window:this._window});t.draw(z+2*o,B+2*o,u,n),t._element&&I&&I.appendChild(t._element)}else{const t=new s({svg:this._element,type:(null===(D=e.cornersDotOptions)||void 0===D?void 0:D.type)||e.dotsOptions.type,window:this._window});for(let e=0;e<w.length;e++)for(let i=0;i<w[e].length;i++)(null===(k=w[e])||void 0===k?void 0:k[i])&&(t.draw(z+i*o,B+e*o,o,((t,r)=>{var n;return!!(null===(n=w[e+r])||void 0===n?void 0:n[i+t])})),t._element&&I&&I.appendChild(t._element))}}))}loadImage(){return new Promise(((t,e)=>{var i;const r=this._options;if(!r.image)return e("Image is not defined");if(null===(i=r.nodeCanvas)||void 0===i?void 0:i.loadImage)r.nodeCanvas.loadImage(r.image).then((e=>{var i,n;if(this._image=e,this._options.imageOptions.saveAsBlob){const t=null===(i=r.nodeCanvas)||void 0===i?void 0:i.createCanvas(this._image.width,this._image.height);null===(n=null==t?void 0:t.getContext("2d"))||void 0===n||n.drawImage(e,0,0),this._imageUri=null==t?void 0:t.toDataURL()}t()})).catch(e);else{const e=new this._window.Image;"string"==typeof r.imageOptions.crossOrigin&&(e.crossOrigin=r.imageOptions.crossOrigin),this._image=e,e.onload=async()=>{this._options.imageOptions.saveAsBlob&&(this._imageUri=await async function(t,e){return new Promise((i=>{const r=new e.XMLHttpRequest;r.onload=function(){const t=new e.FileReader;t.onloadend=function(){i(t.result)},t.readAsDataURL(r.response)},r.open("GET",t),r.responseType="blob",r.send()}))}(r.image||"",this._window)),t()},e.src=r.image}}))}async drawImage({width:t,height:e,count:i,dotSize:r}){const n=this._options,o=this._roundSize((n.width-i*r)/2),s=this._roundSize((n.height-i*r)/2),a=o+this._roundSize(n.imageOptions.margin+(i*r-t)/2),h=s+this._roundSize(n.imageOptions.margin+(i*r-e)/2),d=t-2*n.imageOptions.margin,u=e-2*n.imageOptions.margin,c=this._window.document.createElementNS("http://www.w3.org/2000/svg","image");c.setAttribute("href",this._imageUri||""),c.setAttribute("xlink:href",this._imageUri||""),c.setAttribute("x",String(a)),c.setAttribute("y",String(h)),c.setAttribute("width",`${d}px`),c.setAttribute("height",`${u}px`),this._element.appendChild(c)}_createColor({options:t,color:e,additionalRotation:i,x:r,y:n,height:o,width:s,name:a}){const h=s>o?s:o,d=this._window.document.createElementNS("http://www.w3.org/2000/svg","rect");if(d.setAttribute("x",String(r)),d.setAttribute("y",String(n)),d.setAttribute("height",String(o)),d.setAttribute("width",String(s)),d.setAttribute("clip-path",`url('#clip-path-${a}')`),t){let e;if("radial"===t.type)e=this._window.document.createElementNS("http://www.w3.org/2000/svg","radialGradient"),e.setAttribute("id",a),e.setAttribute("gradientUnits","userSpaceOnUse"),e.setAttribute("fx",String(r+s/2)),e.setAttribute("fy",String(n+o/2)),e.setAttribute("cx",String(r+s/2)),e.setAttribute("cy",String(n+o/2)),e.setAttribute("r",String(h/2));else{const h=((t.rotation||0)+i)%(2*Math.PI),d=(h+2*Math.PI)%(2*Math.PI);let u=r+s/2,c=n+o/2,l=r+s/2,g=n+o/2;d>=0&&d<=.25*Math.PI||d>1.75*Math.PI&&d<=2*Math.PI?(u-=s/2,c-=o/2*Math.tan(h),l+=s/2,g+=o/2*Math.tan(h)):d>.25*Math.PI&&d<=.75*Math.PI?(c-=o/2,u-=s/2/Math.tan(h),g+=o/2,l+=s/2/Math.tan(h)):d>.75*Math.PI&&d<=1.25*Math.PI?(u+=s/2,c+=o/2*Math.tan(h),l-=s/2,g-=o/2*Math.tan(h)):d>1.25*Math.PI&&d<=1.75*Math.PI&&(c+=o/2,u+=s/2/Math.tan(h),g-=o/2,l-=s/2/Math.tan(h)),e=this._window.document.createElementNS("http://www.w3.org/2000/svg","linearGradient"),e.setAttribute("id",a),e.setAttribute("gradientUnits","userSpaceOnUse"),e.setAttribute("x1",String(Math.round(u))),e.setAttribute("y1",String(Math.round(c))),e.setAttribute("x2",String(Math.round(l))),e.setAttribute("y2",String(Math.round(g)))}t.colorStops.forEach((({offset:t,color:i})=>{const r=this._window.document.createElementNS("http://www.w3.org/2000/svg","stop");r.setAttribute("offset",100*t+"%"),r.setAttribute("stop-color",i),e.appendChild(r)})),d.setAttribute("fill",`url('#${a}')`),this._defs.appendChild(e)}else e&&d.setAttribute("fill",e);this._element.appendChild(d)}}p.instanceCount=0;const v=p,_="canvas",m={};for(let t=0;t<=40;t++)m[t]=t;const b={type:_,shape:"square",width:300,height:300,data:"",margin:0,qrOptions:{typeNumber:m[0],mode:void 0,errorCorrectionLevel:"Q"},imageOptions:{saveAsBlob:!0,hideBackgroundDots:!0,imageSize:.4,crossOrigin:void 0,margin:0},dotsOptions:{type:"square",color:"#000",roundSize:!0},backgroundOptions:{round:0,color:"#fff"}};function y(t){const e=Object.assign({},t);if(!e.colorStops||!e.colorStops.length)throw"Field 'colorStops' is required in gradient";return e.rotation?e.rotation=Number(e.rotation):e.rotation=0,e.colorStops=e.colorStops.map((t=>Object.assign(Object.assign({},t),{offset:Number(t.offset)}))),e}function x(t){const e=Object.assign({},t);return e.width=Number(e.width),e.height=Number(e.height),e.margin=Number(e.margin),e.imageOptions=Object.assign(Object.assign({},e.imageOptions),{hideBackgroundDots:Boolean(e.imageOptions.hideBackgroundDots),imageSize:Number(e.imageOptions.imageSize),margin:Number(e.imageOptions.margin)}),e.margin>Math.min(e.width,e.height)&&(e.margin=Math.min(e.width,e.height)),e.dotsOptions=Object.assign({},e.dotsOptions),e.dotsOptions.gradient&&(e.dotsOptions.gradient=y(e.dotsOptions.gradient)),e.cornersSquareOptions&&(e.cornersSquareOptions=Object.assign({},e.cornersSquareOptions),e.cornersSquareOptions.gradient&&(e.cornersSquareOptions.gradient=y(e.cornersSquareOptions.gradient))),e.cornersDotOptions&&(e.cornersDotOptions=Object.assign({},e.cornersDotOptions),e.cornersDotOptions.gradient&&(e.cornersDotOptions.gradient=y(e.cornersDotOptions.gradient))),e.backgroundOptions&&(e.backgroundOptions=Object.assign({},e.backgroundOptions),e.backgroundOptions.gradient&&(e.backgroundOptions.gradient=y(e.backgroundOptions.gradient))),e}var S=i(873),C=i.n(S);function A(t){if(!t)throw new Error("Extension must be defined");"."===t[0]&&(t=t.substring(1));const e={bmp:"image/bmp",gif:"image/gif",ico:"image/vnd.microsoft.icon",jpeg:"image/jpeg",jpg:"image/jpeg",png:"image/png",svg:"image/svg+xml",tif:"image/tiff",tiff:"image/tiff",webp:"image/webp",pdf:"application/pdf"}[t.toLowerCase()];if(!e)throw new Error(`Extension "${t}" is not supported`);return e}class M{constructor(t){(null==t?void 0:t.jsdom)?this._window=new t.jsdom("",{resources:"usable"}).window:this._window=window,this._options=t?x(e(b,t)):b,this.update()}static _clearContainer(t){t&&(t.innerHTML="")}_setupSvg(){if(!this._qr)return;const t=new v(this._options,this._window);this._svg=t.getElement(),this._svgDrawingPromise=t.drawQR(this._qr).then((()=>{var e;this._svg&&(null===(e=this._extension)||void 0===e||e.call(this,t.getElement(),this._options))}))}_setupCanvas(){var t,e;this._qr&&((null===(t=this._options.nodeCanvas)||void 0===t?void 0:t.createCanvas)?(this._nodeCanvas=this._options.nodeCanvas.createCanvas(this._options.width,this._options.height),this._nodeCanvas.width=this._options.width,this._nodeCanvas.height=this._options.height):(this._domCanvas=document.createElement("canvas"),this._domCanvas.width=this._options.width,this._domCanvas.height=this._options.height),this._setupSvg(),this._canvasDrawingPromise=null===(e=this._svgDrawingPromise)||void 0===e?void 0:e.then((()=>{var t;if(!this._svg)return;const e=this._svg,i=(new this._window.XMLSerializer).serializeToString(e),r=btoa(i),n=`data:${A("svg")};base64,${r}`;if(null===(t=this._options.nodeCanvas)||void 0===t?void 0:t.loadImage)return this._options.nodeCanvas.loadImage(n).then((t=>{var e,i;t.width=this._options.width,t.height=this._options.height,null===(i=null===(e=this._nodeCanvas)||void 0===e?void 0:e.getContext("2d"))||void 0===i||i.drawImage(t,0,0)}));{const t=new this._window.Image;return new Promise((e=>{t.onload=()=>{var i,r;null===(r=null===(i=this._domCanvas)||void 0===i?void 0:i.getContext("2d"))||void 0===r||r.drawImage(t,0,0),e()},t.src=n}))}})))}async _getElement(t="png"){if(!this._qr)throw"QR code is empty";return"svg"===t.toLowerCase()?(this._svg&&this._svgDrawingPromise||this._setupSvg(),await this._svgDrawingPromise,this._svg):((this._domCanvas||this._nodeCanvas)&&this._canvasDrawingPromise||this._setupCanvas(),await this._canvasDrawingPromise,this._domCanvas||this._nodeCanvas)}update(t){M._clearContainer(this._container),this._options=t?x(e(this._options,t)):this._options,this._options.data&&(this._qr=C()(this._options.qrOptions.typeNumber,this._options.qrOptions.errorCorrectionLevel),this._qr.addData(this._options.data,this._options.qrOptions.mode||function(t){switch(!0){case/^[0-9]*$/.test(t):return"Numeric";case/^[0-9A-Z $%*+\-./:]*$/.test(t):return"Alphanumeric";default:return"Byte"}}(this._options.data)),this._qr.make(),this._options.type===_?this._setupCanvas():this._setupSvg(),this.append(this._container))}append(t){if(t){if("function"!=typeof t.appendChild)throw"Container should be a single DOM node";this._options.type===_?this._domCanvas&&t.appendChild(this._domCanvas):this._svg&&t.appendChild(this._svg),this._container=t}}applyExtension(t){if(!t)throw"Extension function should be defined.";this._extension=t,this.update()}deleteExtension(){this._extension=void 0,this.update()}async getRawData(t="png"){if(!this._qr)throw"QR code is empty";const e=await this._getElement(t),i=A(t);if(!e)return null;if("svg"===t.toLowerCase()){const t=`<?xml version="1.0" standalone="no"?>\r\n${(new this._window.XMLSerializer).serializeToString(e)}`;return"undefined"==typeof Blob||this._options.jsdom?Buffer.from(t):new Blob([t],{type:i})}return new Promise((t=>{const r=e;if("toBuffer"in r)if("image/png"===i)t(r.toBuffer(i));else if("image/jpeg"===i)t(r.toBuffer(i));else{if("application/pdf"!==i)throw Error("Unsupported extension");t(r.toBuffer(i))}else"toBlob"in r&&r.toBlob(t,i,1)}))}async download(t){if(!this._qr)throw"QR code is empty";if("undefined"==typeof Blob)throw"Cannot download in Node.js, call getRawData instead.";let e="png",i="qr";"string"==typeof t?(e=t,console.warn("Extension is deprecated as argument for 'download' method, please pass object { name: '...', extension: '...' } as argument")):"object"==typeof t&&null!==t&&(t.name&&(i=t.name),t.extension&&(e=t.extension));const r=await this._getElement(e);if(r)if("svg"===e.toLowerCase()){let t=(new XMLSerializer).serializeToString(r);t='<?xml version="1.0" standalone="no"?>\r\n'+t,n(`data:${A(e)};charset=utf-8,${encodeURIComponent(t)}`,`${i}.svg`)}else n(r.toDataURL(A(e)),`${i}.${e}`)}}const $=M})(),r.default})()));
+//# sourceMappingURL=qr-code-styling.js.map
+</script>
+<script>
+(function () {
+"use strict";
+
+/* =================================================================
+   Constants
+================================================================= */
+const QR_BASE = 480;
+
+const DOT_TYPE_OPTIONS = [
+  ["square", "Square"], ["dots", "Dots"], ["rounded", "Rounded"],
+  ["classy", "Classy"], ["classy-rounded", "Classy rounded"], ["extra-rounded", "Extra rounded"]
+];
+const CORNER_TYPE_OPTIONS = [
+  ["square", "Square"], ["dot", "Dot"], ["extra-rounded", "Extra rounded"],
+  ["dots", "Dots"], ["rounded", "Rounded"], ["classy", "Classy"], ["classy-rounded", "Classy rounded"]
+];
+
+const PRESETS = [
+  { name: "Amber",     dots: "#1a1712", corners: "#d97706", background: "#ffffff", dotsType: "rounded",  cornersSquareType: "extra-rounded", cornersDotType: "dot" },
+  { name: "Mono",      dots: "#111111", corners: "#111111", background: "#ffffff", dotsType: "square",   cornersSquareType: "square",         cornersDotType: "square" },
+  { name: "Terminal",  dots: "#4ade80", corners: "#4ade80", background: "#0b0f0d", dotsType: "dots",     cornersSquareType: "square",         cornersDotType: "square" },
+  { name: "Blueprint", dots: "#eaf2fb", corners: "#eaf2fb", background: "#123a63", dotsType: "classy",   cornersSquareType: "square",         cornersDotType: "square" }
+];
+
+/* =================================================================
+   SVG frame compositing (pure string building — no DOM dependency)
+================================================================= */
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+function rr(x, y, w, h, rTL, rTR, rBR, rBL) {
+  rTL = Math.max(0, Math.min(rTL, w / 2, h / 2));
+  rTR = Math.max(0, Math.min(rTR, w / 2, h / 2));
+  rBR = Math.max(0, Math.min(rBR, w / 2, h / 2));
+  rBL = Math.max(0, Math.min(rBL, w / 2, h / 2));
+  return `M${x + rTL},${y} H${x + w - rTR} A${rTR},${rTR} 0 0 1 ${x + w},${y + rTR} V${y + h - rBR} A${rBR},${rBR} 0 0 1 ${x + w - rBR},${y + h} H${x + rBL} A${rBL},${rBL} 0 0 1 ${x},${y + h - rBL} V${y + rTL} A${rTL},${rTL} 0 0 1 ${x + rTL},${y} Z`;
+}
+function stripSvg(svgText) {
+  const openMatch = svgText.match(/<svg[^>]*>/);
+  const openTag = openMatch[0];
+  const w = openTag.match(/width="([\d.]+)"/);
+  const h = openTag.match(/height="([\d.]+)"/);
+  const vb = openTag.match(/viewBox="([^"]+)"/);
+  const inner = svgText.slice(openMatch.index + openTag.length, svgText.lastIndexOf("</svg>"));
+  return { inner, width: w ? parseFloat(w[1]) : null, height: h ? parseFloat(h[1]) : null, viewBox: vb ? vb[1].split(/\s+/).map(Number) : null };
+}
+function embedQr(qrSvgText, qx, qy) {
+  const parsed = stripSvg(qrSvgText);
+  const vb = parsed.viewBox || [0, 0, parsed.width || QR_BASE, parsed.height || QR_BASE];
+  const scale = QR_BASE / vb[2];
+  // Normalize url('#id') -> url(#id): both are valid, but the unquoted form
+  // is understood by a wider range of SVG parsers/tools than the quoted one.
+  const inner = parsed.inner.replace(/url\((['"])(#[^'")]+)\1\)/g, "url($2)");
+  return `<g transform="translate(${qx},${qy}) scale(${scale})">${inner}</g>`;
+}
+const FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+const measureCtx = document.createElement("canvas").getContext("2d");
+function measureText(text, fontSize, weight, spacingEm) {
+  measureCtx.font = `${weight} ${fontSize}px ${FONT_STACK}`;
+  const w = measureCtx.measureText(text).width;
+  return w + (spacingEm || 0) * fontSize * Math.max(0, text.length - 1);
+}
+function fitFontSize(text, maxWidth, baseSize, minSize, weight, spacingEm) {
+  let size = baseSize;
+  while (size > minSize) {
+    if (measureText(text, size, weight, spacingEm) <= maxWidth) return size;
+    size -= 1;
+  }
+  return minSize;
+}
+function captionText(x, y, size, color, text, opts) {
+  opts = opts || {};
+  const spacing = opts.spacing || "0.05em";
+  const weight = opts.weight || 600;
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT_STACK}" font-weight="${weight}" font-size="${size}" fill="${color}" letter-spacing="${spacing}">${esc(text)}</text>`;
+}
+
+function composeFrame(qrSvgText, frame) {
+  const qrSize = QR_BASE;
+  const cap = (frame.caption || "").trim();
+  const style = frame.style;
+  let outerW = qrSize, outerH = qrSize, qx = 0, qy = 0, chrome = "";
+
+  if (style === "none") {
+    outerW = qrSize; outerH = qrSize;
+  } else if (style === "card") {
+    const pad = 42, capH = cap ? 68 : 0;
+    outerW = qrSize + pad * 2;
+    outerH = pad + qrSize + (cap ? capH : pad);
+    qx = pad; qy = pad;
+    chrome += `<path d="${rr(3, 6, outerW, outerH, 26, 26, 26, 26)}" fill="#000000" opacity="0.055"/>`;
+    chrome += `<path d="${rr(0, 0, outerW, outerH, 26, 26, 26, 26)}" fill="${frame.frameColor}" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>`;
+    if (cap) {
+      const fs = fitFontSize(cap, outerW - pad * 1.4, 27, 13, 600, 0.04);
+      chrome += captionText(outerW / 2, qy + qrSize + capH / 2 + 9, fs, frame.textColor, cap, { spacing: "0.04em" });
+    }
+  } else if (style === "bar") {
+    const padTop = 30, padSide = 30, barH = cap ? 92 : 56, r = 26;
+    outerW = qrSize + padSide * 2;
+    outerH = padTop + qrSize + barH;
+    qx = padSide; qy = padTop;
+    chrome += `<path d="${rr(3, 6, outerW, outerH, r, r, r, r)}" fill="#000000" opacity="0.055"/>`;
+    chrome += `<path d="${rr(0, 0, outerW, outerH, r, r, r, r)}" fill="${frame.frameColor}"/>`;
+    chrome += `<path d="${rr(0, padTop + qrSize, outerW, barH, 0, 0, r, r)}" fill="${frame.accentColor}"/>`;
+    if (cap) {
+      const fs = fitFontSize(cap, outerW - padSide * 1.4, 30, 14, 600, 0.04);
+      chrome += captionText(outerW / 2, padTop + qrSize + barH / 2 + 10, fs, frame.textColor, cap, { spacing: "0.04em" });
+    }
+  } else if (style === "ticket") {
+    const pad = 36, capH = cap ? 72 : 54, notchR = 15;
+    outerW = qrSize + pad * 2;
+    const dividerY = pad + qrSize;
+    outerH = dividerY + capH + 26;
+    qx = pad; qy = pad;
+    const maskId = "ticketMask" + Math.random().toString(36).slice(2, 8);
+    chrome += `<defs><mask id="${maskId}"><rect x="0" y="0" width="${outerW}" height="${outerH}" fill="#fff"/><circle cx="0" cy="${dividerY}" r="${notchR}" fill="#000"/><circle cx="${outerW}" cy="${dividerY}" r="${notchR}" fill="#000"/></mask></defs>`;
+    chrome += `<g mask="url(#${maskId})">`;
+    chrome += `<path d="${rr(3, 6, outerW, outerH, 20, 20, 20, 20)}" fill="#000000" opacity="0.055"/>`;
+    chrome += `<path d="${rr(0, 0, outerW, outerH, 20, 20, 20, 20)}" fill="${frame.frameColor}" stroke="${frame.accentColor}" stroke-width="2"/>`;
+    chrome += `</g>`;
+    chrome += `<line x1="${notchR + 6}" y1="${dividerY}" x2="${outerW - notchR - 6}" y2="${dividerY}" stroke="${frame.accentColor}" stroke-width="2" stroke-dasharray="7,7" stroke-linecap="round"/>`;
+    if (cap) {
+      const fs = fitFontSize(cap, outerW - pad * 1.4, 26, 13, 600, 0.04);
+      chrome += captionText(outerW / 2, dividerY + 26 + capH / 2 + 9, fs, frame.textColor, cap, { spacing: "0.04em" });
+    }
+  } else if (style === "tag") {
+    const pad = 34, band = 12, topGap = 26, capH = cap ? 54 : 0, r = 18;
+    outerW = qrSize + pad * 2;
+    outerH = band + topGap + qrSize + (cap ? 22 + capH : pad);
+    qx = pad; qy = band + topGap;
+    chrome += `<path d="${rr(3, 6, outerW, outerH, r, r, r, r)}" fill="#000000" opacity="0.055"/>`;
+    chrome += `<path d="${rr(0, 0, outerW, outerH, r, r, r, r)}" fill="${frame.frameColor}" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>`;
+    chrome += `<path d="${rr(0, 0, outerW, band, r, r, 0, 0)}" fill="${frame.accentColor}"/>`;
+    chrome += `<circle cx="${pad - 12}" cy="${band + 15}" r="5" fill="${frame.accentColor}" opacity="0.55"/>`;
+    chrome += `<circle cx="${outerW - pad + 12}" cy="${band + 15}" r="5" fill="${frame.accentColor}" opacity="0.55"/>`;
+    if (cap) {
+      const upper = cap.toUpperCase();
+      const fs = fitFontSize(upper, outerW - pad * 1.4, 22, 11, 600, 0.14);
+      chrome += captionText(outerW / 2, qy + qrSize + 22 + capH / 2 + 8, fs, frame.textColor, upper, { spacing: "0.14em", weight: 600 });
+    }
+  }
+
+  const qrEmbed = embedQr(qrSvgText, qx, qy);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${outerW}" height="${outerH}" viewBox="0 0 ${outerW} ${outerH}">${chrome}${qrEmbed}</svg>`;
+  return { svg, width: outerW, height: outerH };
+}
+
+/* =================================================================
+   State
+================================================================= */
+function defaultState() {
+  return {
+    data: "https://shhosting.net",
+    ecc: "M",
+    margin: 16,
+    exportSize: 1024,
+    shape: "square",
+    dotsType: "rounded",
+    cornersSquareType: "extra-rounded",
+    cornersDotType: "dot",
+    colors: {
+      dots: { color: "#1a1712", gradient: null },
+      cornersSquare: { color: "#d97706", gradient: null },
+      cornersDot: { color: "#d97706", gradient: null },
+      background: { color: "#ffffff", gradient: null, round: 0 }
+    },
+    logo: {
+      enabled: false,
+      rawDataUrl: null,
+      loadedImage: null,
+      fileKind: null,
+      size: 22,
+      margin: 6,
+      plateShape: "rounded",
+      plateColor: "#ffffff",
+      platePadding: 8,
+      hideBackgroundDots: true
+    },
+    frame: {
+      style: "none",
+      caption: "SCAN ME",
+      frameColor: "#ffffff",
+      accentColor: "#d97706",
+      textColor: "#1a1712"
+    }
+  };
+}
+
+let state = defaultState();
+let qrCodeInstance = null;
+let renderToken = 0;
+let lastComposite = null;
+
+function getQrInstance() {
+  if (!qrCodeInstance) {
+    qrCodeInstance = new QRCodeStyling({ type: "svg", width: QR_BASE, height: QR_BASE, data: " " });
+  }
+  return qrCodeInstance;
+}
+
+/* =================================================================
+   DOM helpers
+================================================================= */
+const $ = (id) => document.getElementById(id);
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function suggestedFilename(ext) {
+  let base = (state.data || "qr-code").trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase()
+    .slice(0, 40);
+  if (!base) base = "qr-code";
+  return `${base}.${ext}`;
+}
+
+let toastTimer;
+function showToast(msg) {
+  const el = $("copy-toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+/* =================================================================
+   Populate static option lists
+================================================================= */
+function fillSelect(select, options) {
+  select.innerHTML = options.map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
+}
+fillSelect($("dots-type"), DOT_TYPE_OPTIONS);
+fillSelect($("corners-square-type"), CORNER_TYPE_OPTIONS);
+fillSelect($("corners-dot-type"), CORNER_TYPE_OPTIONS);
+
+/* =================================================================
+   Colors panel (built dynamically to avoid repeating markup 4x)
+================================================================= */
+function colorGroupHtml(key, label, color) {
+  const up = color.toUpperCase();
+  return `
+  <div class="field">
+    <span class="label">${label}</span>
+    <div class="color-row">
+      <div class="color-field">
+        <input type="color" id="${key}-color" value="${color}">
+        <input type="text" id="${key}-color-text" value="${up}" maxlength="7">
+      </div>
+    </div>
+    <label class="checkline">
+      <input type="checkbox" id="${key}-gradient-toggle">
+      Use a gradient instead
+    </label>
+    <div class="gradient-row" id="${key}-gradient-row">
+      <div class="field-row">
+        <div class="field">
+          <span class="label">Type</span>
+          <select id="${key}-gradient-type">
+            <option value="linear">Linear</option>
+            <option value="radial">Radial</option>
+          </select>
+        </div>
+        <div class="field">
+          <span class="label">Angle <small id="${key}-gradient-rotation-value">0°</small></span>
+          <input type="range" id="${key}-gradient-rotation" min="0" max="360" step="5" value="0">
+        </div>
+      </div>
+      <div class="gradient-stops">
+        <div class="color-field">
+          <input type="color" id="${key}-gradient-stop0" value="${color}">
+          <input type="text" id="${key}-gradient-stop0-text" value="${up}" maxlength="7">
+        </div>
+        <div class="color-field">
+          <input type="color" id="${key}-gradient-stop1" value="#ffffff">
+          <input type="text" id="${key}-gradient-stop1-text" value="#FFFFFF" maxlength="7">
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+$("colors-body").innerHTML = [
+  colorGroupHtml("dots", "Dot color", state.colors.dots.color),
+  colorGroupHtml("cornersSquare", "Corner square color", state.colors.cornersSquare.color),
+  colorGroupHtml("cornersDot", "Corner dot color", state.colors.cornersDot.color),
+  colorGroupHtml("background", "Background color", state.colors.background.color)
+].join('<hr class="divider">') + `
+  <div class="field">
+    <span class="label">Background corner rounding <small id="bg-round-value">0%</small></span>
+    <input type="range" id="bg-round" min="0" max="50" step="1" value="0">
+  </div>`;
+
+function isValidHex(v) { return /^#[0-9a-f]{6}$/i.test(v); }
+
+function bindColorField(colorId, textId, onChange) {
+  const colorInput = $(colorId), textInput = $(textId);
+  colorInput.addEventListener("input", () => {
+    textInput.value = colorInput.value.toUpperCase();
+    onChange(colorInput.value);
+  });
+  textInput.addEventListener("input", () => {
+    let v = textInput.value.trim();
+    if (v && v[0] !== "#") v = "#" + v;
+    if (isValidHex(v)) {
+      colorInput.value = v;
+      onChange(v);
+    }
+  });
+}
+
+function initColorGroup(key, colorsKey) {
+  const group = state.colors[colorsKey];
+  bindColorField(`${key}-color`, `${key}-color-text`, (v) => { group.color = v; scheduleRender(); });
+  bindColorField(`${key}-gradient-stop0`, `${key}-gradient-stop0-text`, (v) => {
+    if (group.gradient) { group.gradient.stops[0] = v; scheduleRender(); }
+  });
+  bindColorField(`${key}-gradient-stop1`, `${key}-gradient-stop1-text`, (v) => {
+    if (group.gradient) { group.gradient.stops[1] = v; scheduleRender(); }
+  });
+  $(`${key}-gradient-toggle`).addEventListener("change", (e) => {
+    const row = $(`${key}-gradient-row`);
+    if (e.target.checked) {
+      row.classList.add("active");
+      group.gradient = {
+        type: $(`${key}-gradient-type`).value,
+        rotation: parseInt($(`${key}-gradient-rotation`).value, 10),
+        stops: [$(`${key}-gradient-stop0`).value, $(`${key}-gradient-stop1`).value]
+      };
+    } else {
+      row.classList.remove("active");
+      group.gradient = null;
+    }
+    scheduleRender();
+  });
+  $(`${key}-gradient-type`).addEventListener("change", (e) => {
+    if (group.gradient) { group.gradient.type = e.target.value; scheduleRender(); }
+  });
+  $(`${key}-gradient-rotation`).addEventListener("input", (e) => {
+    $(`${key}-gradient-rotation-value`).textContent = `${e.target.value}°`;
+    if (group.gradient) { group.gradient.rotation = parseInt(e.target.value, 10); scheduleRender(); }
+  });
+}
+initColorGroup("dots", "dots");
+initColorGroup("cornersSquare", "cornersSquare");
+initColorGroup("cornersDot", "cornersDot");
+initColorGroup("background", "background");
+
+$("bg-round").addEventListener("input", (e) => {
+  $("bg-round-value").textContent = `${e.target.value}%`;
+  state.colors.background.round = parseInt(e.target.value, 10);
+  scheduleRender();
+});
+
+/* =================================================================
+   Segmented button groups
+================================================================= */
+function initSeg(containerId, onChange) {
+  const container = $(containerId);
+  container.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      container.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false"));
+      btn.setAttribute("aria-pressed", "true");
+      onChange(btn.dataset.value);
+    });
+  });
+}
+function setSeg(containerId, value) {
+  $(containerId).querySelectorAll("button").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.value === value));
+  });
+}
+
+initSeg("body-shape", (v) => { state.shape = v; scheduleRender(); });
+initSeg("logo-plate-shape", (v) => { state.logo.plateShape = v; scheduleRender(); });
+initSeg("frame-style", (v) => { state.frame.style = v; scheduleRender(); });
+
+/* =================================================================
+   Content controls
+================================================================= */
+const scheduleRenderNow = () => render();
+const scheduleRenderDebounced = debounce(() => render(), 180);
+function scheduleRender() { scheduleRenderNow(); }
+
+$("data-input").addEventListener("input", (e) => {
+  state.data = e.target.value;
+  scheduleRenderDebounced();
+});
+$("ecc-level").addEventListener("change", (e) => { state.ecc = e.target.value; scheduleRender(); });
+$("margin").addEventListener("input", (e) => {
+  state.margin = parseInt(e.target.value, 10);
+  $("margin-value").textContent = `${state.margin} px`;
+  scheduleRender();
+});
+$("dots-type").addEventListener("change", (e) => { state.dotsType = e.target.value; scheduleRender(); });
+$("corners-square-type").addEventListener("change", (e) => { state.cornersSquareType = e.target.value; scheduleRender(); });
+$("corners-dot-type").addEventListener("change", (e) => { state.cornersDotType = e.target.value; scheduleRender(); });
+
+/* =================================================================
+   Logo controls
+================================================================= */
+$("logo-input").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    state.logo.rawDataUrl = reader.result;
+    state.logo.fileKind = file.type;
+    state.logo.enabled = true;
+    try {
+      state.logo.loadedImage = await loadImage(reader.result);
+    } catch (err) {
+      showToast("Couldn't read that image");
+      return;
+    }
+    $("logo-thumb").innerHTML = `<img src="${reader.result}" alt="">`;
+    $("upload-label").textContent = file.name.length > 24 ? file.name.slice(0, 21) + "…" : file.name;
+    $("logo-remove").hidden = false;
+    scheduleRender();
+  };
+  reader.readAsDataURL(file);
+});
+$("logo-remove").addEventListener("click", (e) => {
+  e.preventDefault();
+  state.logo.enabled = false;
+  state.logo.rawDataUrl = null;
+  state.logo.loadedImage = null;
+  $("logo-input").value = "";
+  $("logo-thumb").innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>`;
+  $("upload-label").textContent = "Add a logo";
+  $("logo-remove").hidden = true;
+  scheduleRender();
+});
+$("logo-size").addEventListener("input", (e) => {
+  state.logo.size = parseInt(e.target.value, 10);
+  $("logo-size-value").textContent = `${state.logo.size}%`;
+  scheduleRender();
+});
+$("logo-margin").addEventListener("input", (e) => {
+  state.logo.margin = parseInt(e.target.value, 10);
+  $("logo-margin-value").textContent = `${state.logo.margin} px`;
+  scheduleRender();
+});
+bindColorField("logo-plate-color", "logo-plate-color-text", (v) => { state.logo.plateColor = v; scheduleRender(); });
+$("logo-plate-padding").addEventListener("input", (e) => {
+  state.logo.platePadding = parseInt(e.target.value, 10);
+  $("logo-plate-padding-value").textContent = `${state.logo.platePadding} px`;
+  scheduleRender();
+});
+$("logo-hide-dots").addEventListener("change", (e) => { state.logo.hideBackgroundDots = e.target.checked; scheduleRender(); });
+
+/* =================================================================
+   Frame & caption controls
+================================================================= */
+$("frame-caption").addEventListener("input", (e) => { state.frame.caption = e.target.value; scheduleRenderDebounced(); });
+bindColorField("frame-color", "frame-color-text", (v) => { state.frame.frameColor = v; scheduleRender(); });
+bindColorField("frame-accent", "frame-accent-text", (v) => { state.frame.accentColor = v; scheduleRender(); });
+bindColorField("frame-text-color", "frame-text-color-text", (v) => { state.frame.textColor = v; scheduleRender(); });
+
+/* =================================================================
+   Export size
+================================================================= */
+$("export-size").addEventListener("input", (e) => {
+  state.exportSize = parseInt(e.target.value, 10);
+  $("export-size-value").textContent = `${state.exportSize} px`;
+});
+
+/* =================================================================
+   Presets
+================================================================= */
+function renderPresets() {
+  $("presets").innerHTML = PRESETS.map((p, i) => `
+    <button class="preset-chip" type="button" data-index="${i}">
+      <span class="preset-swatch" style="background:linear-gradient(135deg, ${p.dots} 50%, ${p.background} 50%)"></span>
+      ${p.name}
+    </button>`).join("");
+  $("presets").querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => applyPreset(PRESETS[parseInt(btn.dataset.index, 10)]));
+  });
+}
+function applyPreset(p) {
+  state.dotsType = p.dotsType;
+  state.cornersSquareType = p.cornersSquareType;
+  state.cornersDotType = p.cornersDotType;
+  state.shape = "square";
+  state.colors.dots = { color: p.dots, gradient: null };
+  state.colors.cornersSquare = { color: p.corners, gradient: null };
+  state.colors.cornersDot = { color: p.corners, gradient: null };
+  state.colors.background = { color: p.background, gradient: null, round: state.colors.background.round };
+  syncUIFromState();
+  scheduleRender();
+}
+renderPresets();
+
+/* =================================================================
+   Reset
+================================================================= */
+$("btn-reset").addEventListener("click", () => {
+  state = defaultState();
+  $("logo-input").value = "";
+  $("logo-thumb").innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>`;
+  $("upload-label").textContent = "Add a logo";
+  $("logo-remove").hidden = true;
+  syncUIFromState();
+  scheduleRender();
+});
+
+/* =================================================================
+   Sync UI <- state (used after presets / reset)
+================================================================= */
+function syncUIFromState() {
+  $("data-input").value = state.data;
+  $("ecc-level").value = state.ecc;
+  $("margin").value = state.margin; $("margin-value").textContent = `${state.margin} px`;
+  $("dots-type").value = state.dotsType;
+  $("corners-square-type").value = state.cornersSquareType;
+  $("corners-dot-type").value = state.cornersDotType;
+  setSeg("body-shape", state.shape);
+
+  ["dots", "cornersSquare", "cornersDot", "background"].forEach((key) => {
+    const g = state.colors[key];
+    $(`${key}-color`).value = g.color;
+    $(`${key}-color-text`).value = g.color.toUpperCase();
+    const toggle = $(`${key}-gradient-toggle`);
+    const row = $(`${key}-gradient-row`);
+    toggle.checked = !!g.gradient;
+    row.classList.toggle("active", !!g.gradient);
+    if (g.gradient) {
+      $(`${key}-gradient-type`).value = g.gradient.type;
+      $(`${key}-gradient-rotation`).value = g.gradient.rotation;
+      $(`${key}-gradient-rotation-value`).textContent = `${g.gradient.rotation}°`;
+      $(`${key}-gradient-stop0`).value = g.gradient.stops[0];
+      $(`${key}-gradient-stop0-text`).value = g.gradient.stops[0].toUpperCase();
+      $(`${key}-gradient-stop1`).value = g.gradient.stops[1];
+      $(`${key}-gradient-stop1-text`).value = g.gradient.stops[1].toUpperCase();
+    }
+  });
+  $("bg-round").value = state.colors.background.round;
+  $("bg-round-value").textContent = `${state.colors.background.round}%`;
+
+  $("logo-size").value = state.logo.size; $("logo-size-value").textContent = `${state.logo.size}%`;
+  $("logo-margin").value = state.logo.margin; $("logo-margin-value").textContent = `${state.logo.margin} px`;
+  setSeg("logo-plate-shape", state.logo.plateShape);
+  $("logo-plate-color").value = state.logo.plateColor;
+  $("logo-plate-color-text").value = state.logo.plateColor.toUpperCase();
+  $("logo-plate-padding").value = state.logo.platePadding;
+  $("logo-plate-padding-value").textContent = `${state.logo.platePadding} px`;
+  $("logo-hide-dots").checked = state.logo.hideBackgroundDots;
+
+  setSeg("frame-style", state.frame.style);
+  $("frame-caption").value = state.frame.caption;
+  $("frame-color").value = state.frame.frameColor; $("frame-color-text").value = state.frame.frameColor.toUpperCase();
+  $("frame-accent").value = state.frame.accentColor; $("frame-accent-text").value = state.frame.accentColor.toUpperCase();
+  $("frame-text-color").value = state.frame.textColor; $("frame-text-color-text").value = state.frame.textColor.toUpperCase();
+
+  $("export-size").value = state.exportSize; $("export-size-value").textContent = `${state.exportSize} px`;
+}
+
+/* =================================================================
+   Logo compositing (backing plate + centered logo -> single raster)
+================================================================= */
+async function buildLogoComposite() {
+  const L = state.logo;
+  if (!L.enabled || !L.loadedImage) return null;
+  const SIZE = QR_BASE;
+  const canvas = document.createElement("canvas");
+  canvas.width = SIZE; canvas.height = SIZE;
+  const ctx = canvas.getContext("2d");
+
+  if (L.plateShape !== "none") {
+    ctx.fillStyle = L.plateColor;
+    ctx.beginPath();
+    if (L.plateShape === "circle") {
+      ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2);
+    } else if (L.plateShape === "rounded") {
+      const r = SIZE * 0.22;
+      ctx.moveTo(r, 0);
+      ctx.arcTo(SIZE, 0, SIZE, SIZE, r);
+      ctx.arcTo(SIZE, SIZE, 0, SIZE, r);
+      ctx.arcTo(0, SIZE, 0, 0, r);
+      ctx.arcTo(0, 0, SIZE, 0, r);
+    } else {
+      ctx.rect(0, 0, SIZE, SIZE);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const pad = (L.platePadding / 24) * (SIZE * 0.22);
+  const avail = SIZE - pad * 2;
+  const img = L.loadedImage;
+  const iw = img.naturalWidth || img.width || 1;
+  const ih = img.naturalHeight || img.height || 1;
+  const scale = Math.min(avail / iw, avail / ih);
+  const dw = iw * scale, dh = ih * scale;
+  ctx.drawImage(img, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
+
+  return canvas.toDataURL("image/png");
+}
+
+/* =================================================================
+   QR options builder
+================================================================= */
+function colorOptsFor(c) {
+  if (c.gradient) {
+    return {
+      gradient: {
+        type: c.gradient.type,
+        rotation: (c.gradient.rotation || 0) * Math.PI / 180,
+        colorStops: [{ offset: 0, color: c.gradient.stops[0] }, { offset: 1, color: c.gradient.stops[1] }]
+      }
+    };
+  }
+  return { color: c.color };
+}
+
+function buildQrOptions(logoDataUrl) {
+  const c = state.colors;
+  const opts = {
+    type: "svg",
+    width: QR_BASE,
+    height: QR_BASE,
+    margin: state.margin,
+    data: state.data,
+    qrOptions: { errorCorrectionLevel: state.ecc },
+    shape: state.shape,
+    dotsOptions: Object.assign({ type: state.dotsType }, colorOptsFor(c.dots)),
+    cornersSquareOptions: Object.assign({ type: state.cornersSquareType }, colorOptsFor(c.cornersSquare)),
+    cornersDotOptions: Object.assign({ type: state.cornersDotType }, colorOptsFor(c.cornersDot)),
+    backgroundOptions: Object.assign({ round: (c.background.round || 0) / 100 }, colorOptsFor(c.background))
+  };
+  if (logoDataUrl) {
+    opts.image = logoDataUrl;
+    opts.imageOptions = {
+      imageSize: state.logo.size / 100,
+      margin: state.logo.margin,
+      hideBackgroundDots: state.logo.hideBackgroundDots,
+      crossOrigin: "anonymous"
+    };
+  }
+  return opts;
+}
+
+/* =================================================================
+   Render pipeline
+================================================================= */
+const EMPTY_PLACEHOLDER = `<div style="display:flex;flex-direction:column;align-items:center;gap:0.6rem;color:var(--text-faint);padding:2.5rem 0;">
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z"/></svg>
+  <span style="font-size:0.85rem;">Your code will appear here</span>
+</div>`;
+
+function setExportButtonsEnabled(on) {
+  ["btn-download-png", "btn-download-svg", "btn-download-jpeg", "btn-download-webp", "btn-copy"].forEach((id) => {
+    $(id).disabled = !on;
+  });
+}
+
+function friendlyErrorMessage(err) {
+  const msg = (err && err.message) || (typeof err === "string" ? err : "") || "";
+  if (/overflow|too (long|big)|capacity/i.test(msg)) {
+    return `That's too much text for ${state.ecc === "H" ? "High" : state.ecc === "Q" ? "Quartile" : state.ecc === "M" ? "Medium" : "Low"} error correction — try a lower level or shorten it.`;
+  }
+  return "Couldn't generate a code from that input.";
+}
+
+async function render() {
+  const token = ++renderToken;
+  const mount = $("qr-preview-mount");
+  const status = $("preview-status");
+  const text = state.data.trim();
+
+  if (!text) {
+    mount.innerHTML = EMPTY_PLACEHOLDER;
+    status.classList.remove("is-error");
+    status.textContent = "Add some text or a link to get started.";
+    setExportButtonsEnabled(false);
+    lastComposite = null;
+    return;
+  }
+
+  try {
+    const logoDataUrl = await buildLogoComposite();
+    if (token !== renderToken) return;
+
+    const inst = getQrInstance();
+    inst.update(buildQrOptions(logoDataUrl));
+    const blob = await inst.getRawData("svg");
+    if (token !== renderToken) return;
+    const svgText = await blob.text();
+    if (token !== renderToken) return;
+
+    const composite = composeFrame(svgText, state.frame);
+    mount.innerHTML = composite.svg;
+    lastComposite = composite;
+
+    status.classList.remove("is-error");
+    status.textContent = `${text.length} character${text.length === 1 ? "" : "s"} · ${state.ecc} error correction`;
+    setExportButtonsEnabled(true);
+  } catch (err) {
+    if (token !== renderToken) return;
+    console.error(err);
+    status.classList.add("is-error");
+    status.textContent = friendlyErrorMessage(err);
+    setExportButtonsEnabled(false);
+  }
+}
+
+/* =================================================================
+   Export
+================================================================= */
+function svgWithSize(svgString, w, h) {
+  return svgString.replace(/<svg([^>]*)>/, (m, attrs) => {
+    const a = attrs.replace(/\swidth="[^"]*"/, "").replace(/\sheight="[^"]*"/, "");
+    return `<svg${a} width="${w}" height="${h}">`;
+  });
+}
+function svgToBlob(svgString) { return new Blob([svgString], { type: "image/svg+xml" }); }
+
+async function rasterBlobAtSize(mime, quality) {
+  if (!lastComposite) return null;
+  const targetW = state.exportSize;
+  const targetH = Math.round(targetW * (lastComposite.height / lastComposite.width));
+  const sized = svgWithSize(lastComposite.svg, targetW, targetH);
+  const blob = svgToBlob(sized);
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW; canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (mime === "image/jpeg") { ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, targetW, targetH); }
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    return await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+$("btn-download-svg").addEventListener("click", () => {
+  if (!lastComposite) return;
+  triggerDownload(svgToBlob(lastComposite.svg), suggestedFilename("svg"));
+});
+$("btn-download-png").addEventListener("click", async () => {
+  const blob = await rasterBlobAtSize("image/png");
+  if (blob) triggerDownload(blob, suggestedFilename("png"));
+});
+$("btn-download-jpeg").addEventListener("click", async () => {
+  const blob = await rasterBlobAtSize("image/jpeg", 0.92);
+  if (blob) triggerDownload(blob, suggestedFilename("jpg"));
+});
+$("btn-download-webp").addEventListener("click", async () => {
+  const blob = await rasterBlobAtSize("image/webp", 0.92);
+  if (blob) triggerDownload(blob, suggestedFilename("webp"));
+  else showToast("WebP export isn't supported in this browser");
+});
+$("btn-copy").addEventListener("click", async () => {
+  try {
+    const blob = await rasterBlobAtSize("image/png");
+    if (!blob) return;
+    if (navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      showToast("Copied to clipboard");
+    } else {
+      showToast("Copy isn't supported in this browser");
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Couldn't copy — try downloading instead");
+  }
+});
+
+/* =================================================================
+   Init
+================================================================= */
+syncUIFromState();
+render();
+
+})();
+
+</script>
+<script src="/assets/js/nav.js" defer></script>
+</body>
+</html>
