@@ -735,6 +735,55 @@ function stripSvg(svgText) {
   const inner = svgText.slice(openMatch.index + openTag.length, svgText.lastIndexOf("</svg>"));
   return { inner, width: w ? parseFloat(w[1]) : null, height: h ? parseFloat(h[1]) : null, viewBox: vb ? vb[1].split(/\s+/).map(Number) : null };
 }
+// Bridges the hairline anti-aliasing seams that appear between adjacent
+// same-color QR modules. The library paints each color group (dots,
+// corner squares, corner dots) as a single <rect fill="..."> (solid
+// color, or a gradient via fill="url(#id)") clipped to a <clipPath>
+// containing the individual module shapes for that group — the shapes
+// themselves carry no fill/stroke of their own. Per the SVG spec, a
+// clipPath's effective geometry is the *raw geometry* of its children,
+// explicitly excluding stroke — so a stroke added directly to those
+// shapes would never render; it isn't part of what gets clipped in.
+// Instead, this duplicates each group's shapes as an unclipped "trap"
+// layer (fill:none, stroked with the group's own paint, thin width) and
+// places it directly underneath the existing crisp clipped rect. Every
+// edge the crisp layer covers stays fully anti-aliased and exactly as
+// before; only the sub-pixel gaps where the top layer's AA leaves
+// partial coverage end up showing the trap's solid paint instead of the
+// background peeking through.
+function bridgeDotSeams(svgText) {
+  const idRe = /<clipPath id="clip-path-((?:dot-color|corners-square-color|corners-dot-color)-[\w-]+)">([\s\S]*?)<\/clipPath>/g;
+  const groups = [];
+  let m;
+  while ((m = idRe.exec(svgText))) groups.push({ id: m[1], inner: m[2] });
+  if (!groups.length) return svgText;
+
+  // Module size, in the SVG's own internal units. Every QR code has a
+  // corner "finder" square that's always exactly 7 modules wide
+  // (independent of QR version/ECC/margin), so dividing its rendered
+  // width by 7 gives the exact per-module cell size for this specific
+  // render without duplicating the QR encoding/version math.
+  const finderTag = svgText.match(/<rect[^>]*clip-path="url\('#clip-path-corners-square-color-[^']*'\)"[^>]*>/);
+  let moduleSize = 16;
+  if (finderTag) {
+    const w = finderTag[0].match(/width="([\d.eE+-]+)"/);
+    if (w) moduleSize = parseFloat(w[1]) / 7;
+  }
+  const trapWidth = Math.max(0.35, Math.min(1.1, moduleSize * 0.06));
+
+  let out = svgText;
+  groups.forEach(({ id, inner }) => {
+    const rectRe = new RegExp(`<rect[^>]*clip-path="url\\('#clip-path-${id}'\\)"[^>]*/>`);
+    const rectTag = out.match(rectRe);
+    if (!rectTag) return;
+    const paintMatch = rectTag[0].match(/fill="([^"]+)"/);
+    if (!paintMatch) return;
+    const trap = `<g fill="none" stroke="${paintMatch[1]}" stroke-width="${trapWidth}" stroke-linejoin="round">${inner}</g>`;
+    out = out.replace(rectTag[0], trap + rectTag[0]);
+  });
+  return out;
+}
+
 function embedQr(qrSvgText, qx, qy) {
   const parsed = stripSvg(qrSvgText);
   const vb = parsed.viewBox || [0, 0, parsed.width || QR_BASE, parsed.height || QR_BASE];
@@ -742,13 +791,7 @@ function embedQr(qrSvgText, qx, qy) {
   // Normalize url('#id') -> url(#id): both are valid, but the unquoted form
   // is understood by a wider range of SVG parsers/tools than the quoted one.
   const inner = parsed.inner.replace(/url\((['"])(#[^'")]+)\1\)/g, "url($2)");
-  // shape-rendering="crispEdges" pairs with dotsOptions.roundSize:false in
-  // buildQrOptions(). The library normally sets this attribute itself on
-  // its own <svg> root, but stripSvg() above discards that root and keeps
-  // only the inner shapes, so the attribute has to be reapplied here on
-  // the wrapping <g> (it inherits to every child path/rect/circle) or the
-  // fix silently does nothing and the anti-aliasing seams stay.
-  return `<g transform="translate(${qx},${qy}) scale(${scale})" shape-rendering="crispEdges">${inner}</g>`;
+  return `<g transform="translate(${qx},${qy}) scale(${scale})">${inner}</g>`;
 }
 const FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
@@ -1022,35 +1065,43 @@ function bindColorField(colorId, textId, onChange) {
 }
 
 function initColorGroup(key, colorsKey) {
-  const group = state.colors[colorsKey];
-  bindColorField(`${key}-color`, `${key}-color-text`, (v) => { group.color = v; scheduleRender(); });
+  // Reads state.colors[colorsKey] fresh on every event rather than closing
+  // over the object reference once at setup time. applyPreset() (and the
+  // reset button) replace state.colors[colorsKey] — and even state itself
+  // — with a brand-new object rather than mutating the existing one, so a
+  // reference captured here at load time would go stale the first time a
+  // preset is applied: these listeners would keep mutating the old,
+  // orphaned object while buildQrOptions() reads the new one, and
+  // gradient toggles/edits would silently stop affecting the render.
+  const group = () => state.colors[colorsKey];
+  bindColorField(`${key}-color`, `${key}-color-text`, (v) => { group().color = v; scheduleRender(); });
   bindColorField(`${key}-gradient-stop0`, `${key}-gradient-stop0-text`, (v) => {
-    if (group.gradient) { group.gradient.stops[0] = v; scheduleRender(); }
+    if (group().gradient) { group().gradient.stops[0] = v; scheduleRender(); }
   });
   bindColorField(`${key}-gradient-stop1`, `${key}-gradient-stop1-text`, (v) => {
-    if (group.gradient) { group.gradient.stops[1] = v; scheduleRender(); }
+    if (group().gradient) { group().gradient.stops[1] = v; scheduleRender(); }
   });
   $(`${key}-gradient-toggle`).addEventListener("change", (e) => {
     const row = $(`${key}-gradient-row`);
     if (e.target.checked) {
       row.classList.add("active");
-      group.gradient = {
+      group().gradient = {
         type: $(`${key}-gradient-type`).value,
         rotation: parseInt($(`${key}-gradient-rotation`).value, 10),
         stops: [$(`${key}-gradient-stop0`).value, $(`${key}-gradient-stop1`).value]
       };
     } else {
       row.classList.remove("active");
-      group.gradient = null;
+      group().gradient = null;
     }
     scheduleRender();
   });
   $(`${key}-gradient-type`).addEventListener("change", (e) => {
-    if (group.gradient) { group.gradient.type = e.target.value; scheduleRender(); }
+    if (group().gradient) { group().gradient.type = e.target.value; scheduleRender(); }
   });
   $(`${key}-gradient-rotation`).addEventListener("input", (e) => {
     $(`${key}-gradient-rotation-value`).textContent = `${e.target.value}°`;
-    if (group.gradient) { group.gradient.rotation = parseInt(e.target.value, 10); scheduleRender(); }
+    if (group().gradient) { group().gradient.rotation = parseInt(e.target.value, 10); scheduleRender(); }
   });
 }
 initColorGroup("dots", "dots");
@@ -1336,14 +1387,7 @@ function buildQrOptions(logoDataUrl) {
     data: state.data,
     qrOptions: { errorCorrectionLevel: state.ecc },
     shape: state.shape,
-    // roundSize:false stops the library from Math.floor()-ing each dot's
-    // size/position to an integer, which is what causes the sub-pixel
-    // anti-aliasing seams between adjacent same-color modules. It also
-    // makes the library set shape-rendering="crispEdges" on the SVG.
-    // This is a single global flag the library reads only from
-    // dotsOptions — it applies to corners/background too, so it doesn't
-    // need to be (and can't be) set separately on those option objects.
-    dotsOptions: Object.assign({ type: state.dotsType, roundSize: false }, colorOptsFor(c.dots)),
+    dotsOptions: Object.assign({ type: state.dotsType }, colorOptsFor(c.dots)),
     cornersSquareOptions: Object.assign({ type: state.cornersSquareType }, colorOptsFor(c.cornersSquare)),
     cornersDotOptions: Object.assign({ type: state.cornersDotType }, colorOptsFor(c.cornersDot)),
     backgroundOptions: Object.assign({ round: (c.background.round || 0) / 100 }, colorOptsFor(c.background))
@@ -1405,7 +1449,7 @@ async function render() {
     inst.update(buildQrOptions(logoDataUrl));
     const blob = await inst.getRawData("svg");
     if (token !== renderToken) return;
-    const svgText = await blob.text();
+    const svgText = bridgeDotSeams(await blob.text());
     if (token !== renderToken) return;
 
     const composite = composeFrame(svgText, state.frame);
