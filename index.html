@@ -116,10 +116,14 @@ button { font-family: inherit; }
 
 /* This page's content is a wide two-column grid, unlike the centered
    under-construction/checksum-verifier layouts, so main is reset to
-   normal block flow instead of the shared sheet's centered flexbox. */
+   normal block flow instead of the shared sheet's centered flexbox.
+   The shared sheet's default main also centers text; that part of the
+   reset was missing here (the checksum verifier's own override sets
+   both), which is what left the intro title/directions centered. */
 main.wrap {
   flex: 1;
   display: block;
+  text-align: left;
 }
 
 /* ---------------------------------------------------------------
@@ -1425,10 +1429,16 @@ function buildQrOptions(logoDataUrl) {
     dotsOptions: Object.assign({ type: state.dotsType }, colorOptsFor(c.dots)),
     cornersSquareOptions: Object.assign({ type: state.cornersSquareType }, colorOptsFor(c.cornersSquare)),
     cornersDotOptions: Object.assign({ type: state.cornersDotType }, colorOptsFor(c.cornersDot)),
-    backgroundOptions: Object.assign({ round: (c.background.round || 0) / 100 }, colorOptsFor(c.background))
+    backgroundOptions: Object.assign({ round: (c.background.round || 0) / 100 }, colorOptsFor(c.background)),
+    // Same reused-instance/per-key-merge issue as colorOptsFor's gradient
+    // field: "image" has to be passed explicitly as null on every render
+    // once a logo has ever been set. Omitting the key when the logo is
+    // removed leaves the library's own persisted options.image pointing
+    // at the old data URL forever, since update()'s merge only overwrites
+    // keys that are actually present in what gets passed to it.
+    image: logoDataUrl || null
   };
   if (logoDataUrl) {
-    opts.image = logoDataUrl;
     opts.imageOptions = {
       imageSize: state.logo.size / 100,
       margin: state.logo.margin,
