@@ -464,7 +464,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
   <div class="intro">
     <div class="eyebrow">Runs locally &middot; nothing uploaded</div>
     <h1>QR Code Generator</h1>
-    <p>Style the shape, colors, logo, and frame, then export it. The code is built and rendered on this page — your text never leaves your device.</p>
+    <p>Style the shape, colors, logo, and frame, then export it.</p>
   </div>
 
   <div class="layout">
@@ -677,7 +677,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
   <p class="tool-disclaimer">This tool was built with the help of various AI agents, models, and platforms. Its code is <a href="https://github.com/shhosting/qr-code-generator">open source.</a></p>
   <span class="footer-credit">
     <span class="footer-group">&copy; 2026 shhosting.net &middot; <a href="mailto:contact@shhosting.net">contact@shhosting.net</a></span>
-    <span class="footer-group">&middot; Hosted on <a href="https://pages.github.com/">GitHub Pages</a> &middot; Built with <a href="https://claude.ai">Claude</a></span>
+    <span class="footer-group">&middot; Hosted on <a href="https://pages.github.com/">GitHub Pages</a> &middot; Site built with <a href="https://claude.ai">Claude</a></span>
   </span>
 </footer>
 
@@ -735,22 +735,39 @@ function stripSvg(svgText) {
   const inner = svgText.slice(openMatch.index + openTag.length, svgText.lastIndexOf("</svg>"));
   return { inner, width: w ? parseFloat(w[1]) : null, height: h ? parseFloat(h[1]) : null, viewBox: vb ? vb[1].split(/\s+/).map(Number) : null };
 }
-// Bridges the hairline anti-aliasing seams that appear between adjacent
-// same-color QR modules. The library paints each color group (dots,
-// corner squares, corner dots) as a single <rect fill="..."> (solid
-// color, or a gradient via fill="url(#id)") clipped to a <clipPath>
-// containing the individual module shapes for that group — the shapes
-// themselves carry no fill/stroke of their own. Per the SVG spec, a
-// clipPath's effective geometry is the *raw geometry* of its children,
-// explicitly excluding stroke — so a stroke added directly to those
-// shapes would never render; it isn't part of what gets clipped in.
-// Instead, this duplicates each group's shapes as an unclipped "trap"
-// layer (fill:none, stroked with the group's own paint, thin width) and
-// places it directly underneath the existing crisp clipped rect. Every
-// edge the crisp layer covers stays fully anti-aliased and exactly as
-// before; only the sub-pixel gaps where the top layer's AA leaves
-// partial coverage end up showing the trap's solid paint instead of the
-// background peeking through.
+// Bridges the hairline anti-aliasing seams / grid misalignment that
+// appear between adjacent same-color QR modules. The library paints
+// each color group (dots, corner squares, corner dots) as a single
+// <rect fill="..."> (solid color, or a gradient via fill="url(#id)")
+// clipped to a <clipPath> containing the individual module shapes for
+// that group — the shapes themselves carry no fill/stroke of their own.
+//
+// Two related problems, two mechanisms:
+//
+// 1. Flat-edged modules (plain <rect> pieces — either dotsOptions.type
+//    "square", or the interior fully-surrounded cells that "rounded"/
+//    "classy"/etc. draw as plain squares) tile edge-to-edge, and when
+//    each is independently anti-aliased at render time, the shared
+//    boundary lands on a slightly different sub-pixel position for each
+//    module. At small render sizes this shows as a visible "brick"
+//    stagger between adjacent modules instead of one flat wall. Setting
+//    shape-rendering="crispEdges" on a clipPath's *child* independently
+//    controls that child's own contribution to the clip boundary — a
+//    sibling <path>/<circle> in the very same clipPath keeps its normal
+//    anti-aliasing. So each <rect> child gets crispEdges (pixel-snapped,
+//    consistent across the whole tiled grid) while every curved piece
+//    is left untouched and stays smooth. This is the primary fix and it
+//    holds at any render size, since crispEdges snaps to whatever pixel
+//    grid is actually being rendered to.
+//
+// 2. Curve-to-curve (or curve-to-flat) joins can't use crispEdges
+//    without reintroducing jagged curves, so a residual sub-pixel gap
+//    can still appear there. For that, this duplicates each group's
+//    shapes as an unclipped "trap" layer (fill:none, stroked with the
+//    group's own paint, thin width) placed directly underneath the
+//    existing crisp clipped rect. Only the sub-pixel gaps where the top
+//    layer's own rendering leaves partial coverage end up showing the
+//    trap's solid paint instead of the background peeking through.
 function bridgeDotSeams(svgText) {
   const idRe = /<clipPath id="clip-path-((?:dot-color|corners-square-color|corners-dot-color)-[\w-]+)">([\s\S]*?)<\/clipPath>/g;
   const groups = [];
@@ -770,15 +787,21 @@ function bridgeDotSeams(svgText) {
     if (w) moduleSize = parseFloat(w[1]) / 7;
   }
   const trapWidth = Math.max(0.35, Math.min(1.1, moduleSize * 0.06));
+  // Crisp-edge every plain <rect> shape (never <path>/<circle>) inside a
+  // clip group. This only ever touches flat, axis-aligned geometry.
+  const crispenRects = (frag) => frag.replace(/<rect(?![^>]*shape-rendering)/g, '<rect shape-rendering="crispEdges"');
 
   let out = svgText;
   groups.forEach(({ id, inner }) => {
+    const crispInner = crispenRects(inner);
+    out = out.replace(inner, crispInner);
+
     const rectRe = new RegExp(`<rect[^>]*clip-path="url\\('#clip-path-${id}'\\)"[^>]*/>`);
     const rectTag = out.match(rectRe);
     if (!rectTag) return;
     const paintMatch = rectTag[0].match(/fill="([^"]+)"/);
     if (!paintMatch) return;
-    const trap = `<g fill="none" stroke="${paintMatch[1]}" stroke-width="${trapWidth}" stroke-linejoin="round">${inner}</g>`;
+    const trap = `<g fill="none" stroke="${paintMatch[1]}" stroke-width="${trapWidth}" stroke-linejoin="round">${crispInner}</g>`;
     out = out.replace(rectTag[0], trap + rectTag[0]);
   });
   return out;
@@ -1365,8 +1388,20 @@ async function buildLogoComposite() {
    QR options builder
 ================================================================= */
 function colorOptsFor(c) {
+  // The qr-code-styling instance is created once and updated on every
+  // render via inst.update() (a deep merge into its own persisted
+  // options), not recreated from scratch — its merge only overwrites
+  // keys that are actually present in the object passed to update().
+  // A key that's simply left out is never touched, so once a gradient
+  // has been set, omitting "gradient" here to signal "no gradient" does
+  // nothing: the library's own stale gradient object stays in place and
+  // keeps rendering, even though our own state has moved on. "gradient"
+  // has to be included on every call — either the real descriptor or an
+  // explicit null — so the merge always has something to overwrite the
+  // previous value with.
   if (c.gradient) {
     return {
+      color: c.color,
       gradient: {
         type: c.gradient.type,
         rotation: (c.gradient.rotation || 0) * Math.PI / 180,
@@ -1374,7 +1409,7 @@ function colorOptsFor(c) {
       }
     };
   }
-  return { color: c.color };
+  return { color: c.color, gradient: null };
 }
 
 function buildQrOptions(logoDataUrl) {
