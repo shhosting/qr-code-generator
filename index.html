@@ -803,7 +803,14 @@ function captionText(x, y, size, color, text, opts) {
   opts = opts || {};
   const spacing = opts.spacing || "0.05em";
   const weight = opts.weight || 600;
-  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT_STACK}" font-weight="${weight}" font-size="${size}" fill="${color}" letter-spacing="${spacing}">${esc(text)}</text>`;
+  // FONT_STACK contains literal double quotes (around "Segoe UI"), so it must
+  // be entity-escaped here just like user-supplied text — otherwise it closes
+  // the font-family attribute early and produces invalid XML. Browsers'
+  // lenient HTML parser tolerates this fine (innerHTML preview keeps working),
+  // but a real XML parser doesn't: standalone .svg downloads come out broken,
+  // and the Image()-based raster export path (PNG/JPEG/WebP/copy) fails to
+  // load the SVG at all, which is why those exports silently do nothing.
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${esc(FONT_STACK)}" font-weight="${weight}" font-size="${size}" fill="${color}" letter-spacing="${spacing}">${esc(text)}</text>`;
 }
 
 function composeFrame(qrSvgText, frame) {
