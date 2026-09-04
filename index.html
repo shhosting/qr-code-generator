@@ -509,25 +509,37 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
           <summary>Content <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></summary>
           <div class="section-body">
             <div class="field">
-              <label class="label" for="data-input">Text or link</label>
-              <textarea id="data-input" spellcheck="false" placeholder="https://example.com"></textarea>
+              <span class="label">QR code type</span>
+              <select id="qr-type"></select>
             </div>
-            <div class="field-row">
+
+            <div id="content-text" class="content-type-fields">
               <div class="field">
-                <label class="label" for="ecc-level">Error correction</label>
-                <select id="ecc-level">
-                  <option value="L">Low (7%)</option>
-                  <option value="M" selected>Medium (15%)</option>
-                  <option value="Q">Quartile (25%)</option>
-                  <option value="H">High (30%)</option>
-                </select>
-              </div>
-              <div class="field">
-                <span class="label">Quiet zone <small id="margin-value">16 px</small></span>
-                <input type="range" id="margin" min="0" max="40" step="2" value="16">
+                <label class="label" for="data-input">Text or link</label>
+                <textarea id="data-input" spellcheck="false" placeholder="https://example.com"></textarea>
               </div>
             </div>
-            <p class="help">Higher error correction survives more damage or a bigger logo, but makes the pattern denser. Quiet zone is the blank border scanners use to find the code — don't shrink it to zero if the code will be printed small.</p>
+
+            <div id="content-wifi" class="content-type-fields" hidden>
+              <div class="field">
+                <label class="label" for="wifi-ssid">Network name (SSID)</label>
+                <input type="text" id="wifi-ssid" spellcheck="false" placeholder="MyNetwork">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <span class="label">Security</span>
+                  <select id="wifi-security"></select>
+                </div>
+                <div class="field" id="wifi-password-field">
+                  <label class="label" for="wifi-password">Password</label>
+                  <input type="text" id="wifi-password" spellcheck="false" placeholder="">
+                </div>
+              </div>
+              <label class="checkline">
+                <input type="checkbox" id="wifi-hidden">
+                Hidden network
+              </label>
+            </div>
           </div>
         </details>
 
@@ -555,6 +567,22 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                 <button type="button" data-value="circle" aria-pressed="false">Circle</button>
               </div>
             </div>
+            <div class="field-row">
+              <div class="field">
+                <label class="label" for="ecc-level">Error correction</label>
+                <select id="ecc-level">
+                  <option value="L">Low (7%)</option>
+                  <option value="M" selected>Medium (15%)</option>
+                  <option value="Q">Quartile (25%)</option>
+                  <option value="H">High (30%)</option>
+                </select>
+              </div>
+              <div class="field">
+                <span class="label">Quiet zone <small id="margin-value">16 px</small></span>
+                <input type="range" id="margin" min="0" max="40" step="2" value="16">
+              </div>
+            </div>
+            <p class="help">Higher error correction survives more damage or a bigger logo, but makes the pattern denser. Quiet zone is the blank border scanners use to find the code — don't shrink it to zero if the code will be printed small.</p>
           </div>
         </details>
 
@@ -710,6 +738,13 @@ const CORNER_TYPE_OPTIONS = [
   ["dots", "Dots"], ["rounded", "Rounded"], ["classy", "Classy"], ["classy-rounded", "Classy rounded"]
 ];
 
+const QR_TYPE_OPTIONS = [
+  ["text", "Text or link"], ["wifi", "Wi-Fi network"]
+];
+const WIFI_SECURITY_OPTIONS = [
+  ["WPA", "WPA / WPA2 / WPA3"], ["WEP", "WEP"], ["nopass", "None (open)"]
+];
+
 const PRESETS = [
   { name: "Amber",     dots: "#1a1712", corners: "#d97706", background: "#ffffff", dotsType: "rounded",  cornersSquareType: "extra-rounded", cornersDotType: "dot" },
   { name: "Mono",      dots: "#111111", corners: "#111111", background: "#ffffff", dotsType: "square",   cornersSquareType: "square",         cornersDotType: "square" },
@@ -846,7 +881,14 @@ function composeFrame(qrSvgText, frame) {
 ================================================================= */
 function defaultState() {
   return {
+    qrType: "text",
     data: "https://shhosting.net",
+    wifi: {
+      ssid: "",
+      password: "",
+      security: "WPA",
+      hidden: false
+    },
     ecc: "M",
     margin: 16,
     exportSize: 1024,
@@ -943,6 +985,8 @@ function fillSelect(select, options) {
 fillSelect($("dots-type"), DOT_TYPE_OPTIONS);
 fillSelect($("corners-square-type"), CORNER_TYPE_OPTIONS);
 fillSelect($("corners-dot-type"), CORNER_TYPE_OPTIONS);
+fillSelect($("qr-type"), QR_TYPE_OPTIONS);
+fillSelect($("wifi-security"), WIFI_SECURITY_OPTIONS);
 
 /* =================================================================
    Colors panel (built dynamically to avoid repeating markup 4x)
@@ -1100,10 +1144,42 @@ const scheduleRenderNow = () => render();
 const scheduleRenderDebounced = debounce(() => render(), 180);
 function scheduleRender() { scheduleRenderNow(); }
 
+function updateContentTypeUI() {
+  $("content-text").hidden = state.qrType !== "text";
+  $("content-wifi").hidden = state.qrType !== "wifi";
+}
+function updateWifiPasswordVisibility() {
+  $("wifi-password-field").hidden = state.wifi.security === "nopass";
+}
+
+$("qr-type").addEventListener("change", (e) => {
+  state.qrType = e.target.value;
+  updateContentTypeUI();
+  scheduleRender();
+});
+
 $("data-input").addEventListener("input", (e) => {
   state.data = e.target.value;
   scheduleRenderDebounced();
 });
+$("wifi-ssid").addEventListener("input", (e) => {
+  state.wifi.ssid = e.target.value;
+  scheduleRenderDebounced();
+});
+$("wifi-password").addEventListener("input", (e) => {
+  state.wifi.password = e.target.value;
+  scheduleRenderDebounced();
+});
+$("wifi-security").addEventListener("change", (e) => {
+  state.wifi.security = e.target.value;
+  updateWifiPasswordVisibility();
+  scheduleRender();
+});
+$("wifi-hidden").addEventListener("change", (e) => {
+  state.wifi.hidden = e.target.checked;
+  scheduleRender();
+});
+
 $("ecc-level").addEventListener("change", (e) => { state.ecc = e.target.value; scheduleRender(); });
 $("margin").addEventListener("input", (e) => {
   state.margin = parseInt(e.target.value, 10);
@@ -1227,7 +1303,14 @@ $("btn-reset").addEventListener("click", () => {
    Sync UI <- state (used after presets / reset)
 ================================================================= */
 function syncUIFromState() {
+  $("qr-type").value = state.qrType;
   $("data-input").value = state.data;
+  $("wifi-ssid").value = state.wifi.ssid;
+  $("wifi-password").value = state.wifi.password;
+  $("wifi-security").value = state.wifi.security;
+  $("wifi-hidden").checked = state.wifi.hidden;
+  updateContentTypeUI();
+  updateWifiPasswordVisibility();
   $("ecc-level").value = state.ecc;
   $("margin").value = state.margin; $("margin-value").textContent = `${state.margin} px`;
   $("dots-type").value = state.dotsType;
@@ -1344,6 +1427,33 @@ function colorOptsFor(c) {
   return { color: c.color, gradient: null };
 }
 
+/* =================================================================
+   QR payload — text vs structured types
+================================================================= */
+// Wi-Fi QR spec escapes backslash, semicolon, comma, and colon since
+// those are the field/record delimiters in the WIFI: payload format.
+function wifiEscape(s) {
+  return String(s).replace(/([\\;,:])/g, "\\$1");
+}
+
+function buildWifiPayload() {
+  const w = state.wifi;
+  const ssid = wifiEscape(w.ssid || "");
+  let payload = `WIFI:T:${w.security};S:${ssid};`;
+  if (w.security !== "nopass") {
+    payload += `P:${wifiEscape(w.password || "")};`;
+  }
+  payload += `H:${w.hidden ? "true" : "false"};;`;
+  return payload;
+}
+
+function getPayloadString() {
+  if (state.qrType === "wifi") {
+    return state.wifi.ssid.trim() ? buildWifiPayload() : "";
+  }
+  return state.data;
+}
+
 function buildQrOptions(logoDataUrl) {
   const c = state.colors;
   const opts = {
@@ -1351,7 +1461,7 @@ function buildQrOptions(logoDataUrl) {
     width: QR_BASE,
     height: QR_BASE,
     margin: state.margin,
-    data: state.data,
+    data: getPayloadString(),
     qrOptions: { errorCorrectionLevel: state.ecc },
     shape: state.shape,
     dotsOptions: Object.assign({ type: state.dotsType }, colorOptsFor(c.dots)),
@@ -1403,12 +1513,14 @@ async function render() {
   const token = ++renderToken;
   const mount = $("qr-preview-mount");
   const status = $("preview-status");
-  const text = state.data.trim();
+  const text = getPayloadString().trim();
 
   if (!text) {
     mount.innerHTML = EMPTY_PLACEHOLDER;
     status.classList.remove("is-error");
-    status.textContent = "Add some text or a link to get started.";
+    status.textContent = state.qrType === "wifi"
+      ? "Add a network name (SSID) to get started."
+      : "Add some text or a link to get started.";
     setExportButtonsEnabled(false);
     lastComposite = null;
     return;
