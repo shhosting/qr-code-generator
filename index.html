@@ -559,7 +559,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                     <input type="password" id="wifi-password" spellcheck="false" autocomplete="off" placeholder="">
                     <button type="button" class="visibility-toggle" id="wifi-password-toggle" aria-label="Show password" aria-pressed="false">
                       <svg id="wifi-password-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>
+                        <path d="M3 3l18 18M10.6 10.6a2.6 2.6 0 0 0 3.7 3.7M9.9 5.1A11 11 0 0 1 12 5c7 0 11 7 11 7a13.5 13.5 0 0 1-3.1 3.8M6.2 6.3A13.9 13.9 0 0 0 1 12s4 7 11 7a10.7 10.7 0 0 0 4-.8"/>
                       </svg>
                     </button>
                   </div>
@@ -1216,7 +1216,7 @@ $("wifi-password-toggle").addEventListener("click", () => {
   input.type = willShow ? "text" : "password";
   btn.setAttribute("aria-pressed", String(willShow));
   btn.setAttribute("aria-label", willShow ? "Hide password" : "Show password");
-  $("wifi-password-toggle-icon").innerHTML = willShow ? EYE_OFF_ICON : EYE_ICON;
+  $("wifi-password-toggle-icon").innerHTML = willShow ? EYE_ICON : EYE_OFF_ICON;
 });
 $("wifi-security").addEventListener("change", (e) => {
   state.wifi.security = e.target.value;
