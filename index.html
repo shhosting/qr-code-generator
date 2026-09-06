@@ -570,6 +570,71 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                 Hidden network
               </label>
             </div>
+
+            <div id="content-vcard" class="content-type-fields" hidden>
+              <div class="field-row">
+                <div class="field">
+                  <label class="label" for="vcard-first-name">First name</label>
+                  <input type="text" id="vcard-first-name" spellcheck="false" placeholder="Jane">
+                </div>
+                <div class="field">
+                  <label class="label" for="vcard-last-name">Last name</label>
+                  <input type="text" id="vcard-last-name" spellcheck="false" placeholder="Doe">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label class="label" for="vcard-org">Organization</label>
+                  <input type="text" id="vcard-org" spellcheck="false" placeholder="Acme Inc.">
+                </div>
+                <div class="field">
+                  <label class="label" for="vcard-title">Job title</label>
+                  <input type="text" id="vcard-title" spellcheck="false" placeholder="Engineer">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label class="label" for="vcard-phone">Phone</label>
+                  <input type="text" id="vcard-phone" spellcheck="false" placeholder="+1 555 123 4567">
+                </div>
+                <div class="field">
+                  <label class="label" for="vcard-email">Email</label>
+                  <input type="text" id="vcard-email" spellcheck="false" placeholder="jane@example.com">
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="vcard-url">Website</label>
+                <input type="text" id="vcard-url" spellcheck="false" placeholder="https://example.com">
+              </div>
+              <div class="field">
+                <label class="label" for="vcard-street">Street address</label>
+                <input type="text" id="vcard-street" spellcheck="false" placeholder="123 Main St">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label class="label" for="vcard-city">City</label>
+                  <input type="text" id="vcard-city" spellcheck="false" placeholder="Springfield">
+                </div>
+                <div class="field">
+                  <label class="label" for="vcard-state">State / Region</label>
+                  <input type="text" id="vcard-state" spellcheck="false" placeholder="UT">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label class="label" for="vcard-zip">ZIP / Postal code</label>
+                  <input type="text" id="vcard-zip" spellcheck="false" placeholder="84720">
+                </div>
+                <div class="field">
+                  <label class="label" for="vcard-country">Country</label>
+                  <input type="text" id="vcard-country" spellcheck="false" placeholder="USA">
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="vcard-note">Note</label>
+                <textarea id="vcard-note" spellcheck="false" placeholder="Optional note"></textarea>
+              </div>
+            </div>
           </div>
         </details>
 
@@ -768,7 +833,16 @@ const CORNER_TYPE_OPTIONS = [
 ];
 
 const QR_TYPE_OPTIONS = [
-  ["text", "Text or link"], ["wifi", "Wi-Fi network"]
+  ["text", "Text or link"], ["wifi", "Wi-Fi network"], ["vcard", "Contact card"]
+];
+// Single source of truth for the vcard field set: drives event wiring and
+// UI sync so those two lists can't drift out of sync with each other.
+const VCARD_FIELDS = [
+  ["vcard-first-name", "firstName"], ["vcard-last-name", "lastName"],
+  ["vcard-org", "org"], ["vcard-title", "title"],
+  ["vcard-phone", "phone"], ["vcard-email", "email"], ["vcard-url", "url"],
+  ["vcard-street", "street"], ["vcard-city", "city"], ["vcard-state", "state"],
+  ["vcard-zip", "zip"], ["vcard-country", "country"], ["vcard-note", "note"]
 ];
 const WIFI_SECURITY_OPTIONS = [
   ["WPA", "WPA / WPA2 / WPA3"], ["WEP", "WEP"], ["nopass", "None (open)"]
@@ -924,6 +998,12 @@ function defaultState() {
       password: "",
       security: "WPA",
       hidden: false
+    },
+    vcard: {
+      firstName: "", lastName: "", org: "", title: "",
+      phone: "", email: "", url: "",
+      street: "", city: "", state: "", zip: "", country: "",
+      note: ""
     },
     ecc: "M",
     margin: 16,
@@ -1199,6 +1279,7 @@ function scheduleRender() { scheduleRenderNow(); }
 function updateContentTypeUI() {
   $("content-text").hidden = state.qrType !== "text";
   $("content-wifi").hidden = state.qrType !== "wifi";
+  $("content-vcard").hidden = state.qrType !== "vcard";
 }
 function updateWifiPasswordVisibility() {
   $("wifi-password-field").hidden = state.wifi.security === "nopass";
@@ -1241,6 +1322,13 @@ $("wifi-security").addEventListener("change", (e) => {
 $("wifi-hidden").addEventListener("change", (e) => {
   state.wifi.hidden = e.target.checked;
   scheduleRender();
+});
+
+VCARD_FIELDS.forEach(([id, key]) => {
+  $(id).addEventListener("input", (e) => {
+    state.vcard[key] = e.target.value;
+    scheduleRenderDebounced();
+  });
 });
 
 $("ecc-level").addEventListener("change", (e) => { state.ecc = e.target.value; scheduleRender(); });
@@ -1376,6 +1464,7 @@ function syncUIFromState() {
   $("wifi-password").value = state.wifi.password;
   $("wifi-security").value = state.wifi.security;
   $("wifi-hidden").checked = state.wifi.hidden;
+  VCARD_FIELDS.forEach(([id, key]) => { $(id).value = state.vcard[key]; });
   updateContentTypeUI();
   updateWifiPasswordVisibility();
   $("ecc-level").value = state.ecc;
@@ -1516,9 +1605,49 @@ function buildWifiPayload() {
   return payload;
 }
 
+// vCard 3.0 escaping differs from WIFI: backslash, comma, and semicolon are
+// backslash-escaped, and colon is left alone (unlike the WIFI: format, where
+// colon is a delimiter). Literal newlines inside a value (e.g. multi-line
+// notes) become the two-character sequence \n rather than a real line break,
+// since a real line break would be read as the start of a new property.
+function vcardEscape(s) {
+  return String(s).replace(/([\\,;])/g, "\\$1").replace(/\r\n|\r|\n/g, "\\n");
+}
+
+function buildVcardPayload() {
+  const v = state.vcard;
+  const first = v.firstName.trim();
+  const last = v.lastName.trim();
+  const fullName = [first, last].filter(Boolean).join(" ");
+  const lines = ["BEGIN:VCARD", "VERSION:3.0", `N:${vcardEscape(last)};${vcardEscape(first)};;;`];
+  // FN is mandatory per RFC 2426 even though N's components are all optional;
+  // getPayloadString() already guarantees first or last is non-empty before
+  // this function is called, so fullName is never blank here.
+  lines.push(`FN:${vcardEscape(fullName)}`);
+  if (v.org.trim()) lines.push(`ORG:${vcardEscape(v.org.trim())}`);
+  if (v.title.trim()) lines.push(`TITLE:${vcardEscape(v.title.trim())}`);
+  if (v.phone.trim()) lines.push(`TEL;TYPE=CELL:${vcardEscape(v.phone.trim())}`);
+  if (v.email.trim()) lines.push(`EMAIL:${vcardEscape(v.email.trim())}`);
+  if (v.url.trim()) lines.push(`URL:${vcardEscape(v.url.trim())}`);
+  // ADR component order is fixed by the spec: PO box, extended address,
+  // street, locality, region, postal code, country. The first two are
+  // never exposed in this UI, so they're left empty rather than dropped
+  // (dropping them would shift every field after into the wrong slot).
+  const hasAddress = v.street.trim() || v.city.trim() || v.state.trim() || v.zip.trim() || v.country.trim();
+  if (hasAddress) {
+    lines.push(`ADR;TYPE=HOME:;;${vcardEscape(v.street.trim())};${vcardEscape(v.city.trim())};${vcardEscape(v.state.trim())};${vcardEscape(v.zip.trim())};${vcardEscape(v.country.trim())}`);
+  }
+  if (v.note.trim()) lines.push(`NOTE:${vcardEscape(v.note.trim())}`);
+  lines.push("END:VCARD");
+  return lines.join("\n");
+}
+
 function getPayloadString() {
   if (state.qrType === "wifi") {
     return state.wifi.ssid.trim() ? buildWifiPayload() : "";
+  }
+  if (state.qrType === "vcard") {
+    return (state.vcard.firstName.trim() || state.vcard.lastName.trim()) ? buildVcardPayload() : "";
   }
   return state.data;
 }
@@ -1592,6 +1721,8 @@ async function render() {
     status.classList.remove("is-error");
     status.textContent = state.qrType === "wifi"
       ? "Add a network name (SSID) to get started."
+      : state.qrType === "vcard"
+      ? "Add a first or last name to get started."
       : "Add some text or a link to get started.";
     setExportButtonsEnabled(false);
     lastComposite = null;
