@@ -635,6 +635,31 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                 <textarea id="vcard-note" spellcheck="false" placeholder="Optional note"></textarea>
               </div>
             </div>
+
+            <div id="content-email" class="content-type-fields" hidden>
+              <div class="field">
+                <label class="label" for="email-to">To</label>
+                <input type="text" id="email-to" spellcheck="false" placeholder="jane@example.com">
+              </div>
+              <div class="field">
+                <label class="label" for="email-subject">Subject</label>
+                <input type="text" id="email-subject" spellcheck="false" placeholder="Optional subject">
+              </div>
+              <div class="field">
+                <label class="label" for="email-body">Body</label>
+                <textarea id="email-body" spellcheck="false" placeholder="Optional message"></textarea>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label class="label" for="email-cc">CC</label>
+                  <input type="text" id="email-cc" spellcheck="false" placeholder="Comma-separated addresses">
+                </div>
+                <div class="field">
+                  <label class="label" for="email-bcc">BCC</label>
+                  <input type="text" id="email-bcc" spellcheck="false" placeholder="Comma-separated addresses">
+                </div>
+              </div>
+            </div>
           </div>
         </details>
 
@@ -833,7 +858,7 @@ const CORNER_TYPE_OPTIONS = [
 ];
 
 const QR_TYPE_OPTIONS = [
-  ["text", "Text or link"], ["wifi", "Wi-Fi network"], ["vcard", "Contact card"]
+  ["text", "Text or link"], ["wifi", "Wi-Fi network"], ["vcard", "Contact card"], ["email", "Email message"]
 ];
 // Single source of truth for the vcard field set: drives event wiring and
 // UI sync so those two lists can't drift out of sync with each other.
@@ -843,6 +868,10 @@ const VCARD_FIELDS = [
   ["vcard-phone", "phone"], ["vcard-email", "email"], ["vcard-url", "url"],
   ["vcard-street", "street"], ["vcard-city", "city"], ["vcard-state", "state"],
   ["vcard-zip", "zip"], ["vcard-country", "country"], ["vcard-note", "note"]
+];
+const EMAIL_FIELDS = [
+  ["email-to", "to"], ["email-subject", "subject"], ["email-body", "body"],
+  ["email-cc", "cc"], ["email-bcc", "bcc"]
 ];
 const WIFI_SECURITY_OPTIONS = [
   ["WPA", "WPA / WPA2 / WPA3"], ["WEP", "WEP"], ["nopass", "None (open)"]
@@ -1004,6 +1033,9 @@ function defaultState() {
       phone: "", email: "", url: "",
       street: "", city: "", state: "", zip: "", country: "",
       note: ""
+    },
+    email: {
+      to: "", subject: "", body: "", cc: "", bcc: ""
     },
     ecc: "M",
     margin: 16,
@@ -1280,6 +1312,7 @@ function updateContentTypeUI() {
   $("content-text").hidden = state.qrType !== "text";
   $("content-wifi").hidden = state.qrType !== "wifi";
   $("content-vcard").hidden = state.qrType !== "vcard";
+  $("content-email").hidden = state.qrType !== "email";
 }
 function updateWifiPasswordVisibility() {
   $("wifi-password-field").hidden = state.wifi.security === "nopass";
@@ -1327,6 +1360,13 @@ $("wifi-hidden").addEventListener("change", (e) => {
 VCARD_FIELDS.forEach(([id, key]) => {
   $(id).addEventListener("input", (e) => {
     state.vcard[key] = e.target.value;
+    scheduleRenderDebounced();
+  });
+});
+
+EMAIL_FIELDS.forEach(([id, key]) => {
+  $(id).addEventListener("input", (e) => {
+    state.email[key] = e.target.value;
     scheduleRenderDebounced();
   });
 });
@@ -1465,6 +1505,7 @@ function syncUIFromState() {
   $("wifi-security").value = state.wifi.security;
   $("wifi-hidden").checked = state.wifi.hidden;
   VCARD_FIELDS.forEach(([id, key]) => { $(id).value = state.vcard[key]; });
+  EMAIL_FIELDS.forEach(([id, key]) => { $(id).value = state.email[key]; });
   updateContentTypeUI();
   updateWifiPasswordVisibility();
   $("ecc-level").value = state.ecc;
@@ -1642,12 +1683,43 @@ function buildVcardPayload() {
   return lines.join("\n");
 }
 
+// Address-list fields (to/cc/bcc) can hold multiple comma-separated
+// addresses per RFC 6068. A blanket encodeURIComponent is too aggressive
+// here: "@" is structural in addr-spec ("local-part @ domain"), not a
+// character to escape, and "+" is common in address local-parts (Gmail-style
+// subaddressing). Both need restoring after encoding, same as the comma
+// list-separator. Query values (subject/body) don't have that constraint -
+// they're single opaque strings, so a plain encodeURIComponent is correct.
+function mailtoEncodeAddressList(s) {
+  return encodeURIComponent(s.trim())
+    .replace(/%40/g, "@")
+    .replace(/%2C/g, ",")
+    .replace(/%2B/g, "+");
+}
+function mailtoEncodeParam(s) {
+  return encodeURIComponent(s);
+}
+
+function buildMailtoPayload() {
+  const m = state.email;
+  const params = [];
+  if (m.subject.trim()) params.push(`subject=${mailtoEncodeParam(m.subject.trim())}`);
+  if (m.body.trim()) params.push(`body=${mailtoEncodeParam(m.body.trim())}`);
+  if (m.cc.trim()) params.push(`cc=${mailtoEncodeAddressList(m.cc)}`);
+  if (m.bcc.trim()) params.push(`bcc=${mailtoEncodeAddressList(m.bcc)}`);
+  const query = params.length ? `?${params.join("&")}` : "";
+  return `mailto:${mailtoEncodeAddressList(m.to)}${query}`;
+}
+
 function getPayloadString() {
   if (state.qrType === "wifi") {
     return state.wifi.ssid.trim() ? buildWifiPayload() : "";
   }
   if (state.qrType === "vcard") {
     return (state.vcard.firstName.trim() || state.vcard.lastName.trim()) ? buildVcardPayload() : "";
+  }
+  if (state.qrType === "email") {
+    return state.email.to.trim() ? buildMailtoPayload() : "";
   }
   return state.data;
 }
@@ -1723,6 +1795,8 @@ async function render() {
       ? "Add a network name (SSID) to get started."
       : state.qrType === "vcard"
       ? "Add a first or last name to get started."
+      : state.qrType === "email"
+      ? "Add a recipient address to get started."
       : "Add some text or a link to get started.";
     setExportButtonsEnabled(false);
     lastComposite = null;
