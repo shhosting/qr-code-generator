@@ -315,6 +315,13 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
 .help {
   font-size: 0.78rem; color: var(--text-faint); line-height: 1.45;
 }
+/* Same color as .preview-status.is-error, so an invalid field and the
+   preview's own error line read as one consistent "something's wrong"
+   signal instead of two different reds. */
+.field.has-error input { border-color: #c2410c; }
+.help.field-error { color: #c2410c; font-weight: 500; }
+.help.is-error { color: #c2410c; font-weight: 500; }
+.help.is-good { color: var(--good); font-weight: 500; }
 
 .upload-zone {
   border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
@@ -688,6 +695,29 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                 </div>
               </div>
             </div>
+
+            <div id="content-geo" class="content-type-fields" hidden>
+              <div class="field">
+                <label class="label" for="geo-paste">Paste coordinates or a map link</label>
+                <input type="text" id="geo-paste" spellcheck="false" placeholder="40.7128, -74.0060 · a Google/Apple Maps link · DMS · geo: URI">
+                <p class="help" id="geo-paste-status">Decimal pairs, DMS (40°42'46"N 74°00'22"W), a full Google or Apple Maps link, or a geo: URI all work — this fills in the fields below, which you can still edit by hand.</p>
+              </div>
+              <div class="field-row">
+                <div class="field" id="geo-latitude-field">
+                  <label class="label" for="geo-latitude">Latitude</label>
+                  <input type="text" id="geo-latitude" spellcheck="false" placeholder="40.7128" inputmode="decimal">
+                </div>
+                <div class="field" id="geo-longitude-field">
+                  <label class="label" for="geo-longitude">Longitude</label>
+                  <input type="text" id="geo-longitude" spellcheck="false" placeholder="-74.0060" inputmode="decimal">
+                </div>
+              </div>
+              <p class="help field-error" id="geo-range-error" hidden></p>
+              <div class="field" id="geo-altitude-field">
+                <label class="label" for="geo-altitude">Altitude (optional)</label>
+                <input type="text" id="geo-altitude" spellcheck="false" placeholder="Meters above sea level" inputmode="decimal">
+              </div>
+            </div>
           </div>
         </details>
 
@@ -888,11 +918,13 @@ const CORNER_TYPE_OPTIONS = [
 
 const QR_TYPE_OPTIONS = [
   ["text", "Text or link"], ["wifi", "Wi-Fi network"], ["vcard", "Contact card"],
-  ["phone", "Phone call"], ["sms", "Text message"], ["email", "Email message"]
+  ["phone", "Phone call"], ["sms", "Text message"], ["email", "Email message"],
+  ["geo", "Location"]
 ];
 // Same single-source-of-truth pattern as VCARD_FIELDS/EMAIL_FIELDS below.
 const PHONE_FIELDS = [["phone-number", "number"]];
 const SMS_FIELDS = [["sms-number", "number"], ["sms-message", "message"]];
+const GEO_FIELDS = [["geo-latitude", "latitude"], ["geo-longitude", "longitude"], ["geo-altitude", "altitude"]];
 // Single source of truth for the vcard field set: drives event wiring and
 // UI sync so those two lists can't drift out of sync with each other.
 const VCARD_FIELDS = [
@@ -1076,6 +1108,9 @@ function defaultState() {
     },
     email: {
       to: "", subject: "", body: "", cc: "", bcc: ""
+    },
+    geo: {
+      latitude: "", longitude: "", altitude: ""
     },
     ecc: "M",
     margin: 16,
@@ -1355,6 +1390,7 @@ function updateContentTypeUI() {
   $("content-wifi").hidden = state.qrType !== "wifi";
   $("content-vcard").hidden = state.qrType !== "vcard";
   $("content-email").hidden = state.qrType !== "email";
+  $("content-geo").hidden = state.qrType !== "geo";
 }
 function updateWifiPasswordVisibility() {
   $("wifi-password-field").hidden = state.wifi.security === "nopass";
@@ -1426,6 +1462,77 @@ EMAIL_FIELDS.forEach(([id, key]) => {
     scheduleRenderDebounced();
   });
 });
+
+// The default help copy under the paste field, restored whenever it's
+// emptied out so the field never sits there with a stale status message.
+const GEO_PASTE_HELP_TEXT = $("geo-paste-status").textContent;
+
+// Puts a red border on whichever of lat/lon/alt is currently invalid and
+// surfaces one error message below the row — only once the person has put
+// something in, so an untouched empty form doesn't open already "wrong".
+function updateGeoValidationUI() {
+  const result = validateGeo(state.geo);
+  $("geo-latitude-field").classList.toggle("has-error", !!result.errors.latitude);
+  $("geo-longitude-field").classList.toggle("has-error", !!result.errors.longitude);
+  $("geo-altitude-field").classList.toggle("has-error", !!result.errors.altitude);
+
+  const touched = state.geo.latitude.trim() || state.geo.longitude.trim() || state.geo.altitude.trim();
+  const message = result.errors.latitude || result.errors.longitude || result.errors.altitude;
+  const errorEl = $("geo-range-error");
+  errorEl.hidden = !touched || !message;
+  errorEl.textContent = message || "";
+  return result;
+}
+
+GEO_FIELDS.forEach(([id, key]) => {
+  $(id).addEventListener("input", (e) => {
+    state.geo[key] = e.target.value;
+    updateGeoValidationUI();
+    scheduleRenderDebounced();
+  });
+});
+
+// The paste field never becomes part of the encoded payload itself — it's
+// a scratch pad that fills in the real lat/lon/alt fields above, which
+// stay the source of truth and remain editable afterward.
+function handleGeoPasteInput() {
+  const raw = $("geo-paste").value;
+  const statusEl = $("geo-paste-status");
+
+  if (!raw.trim()) {
+    statusEl.classList.remove("is-error", "is-good");
+    statusEl.textContent = GEO_PASTE_HELP_TEXT;
+    return;
+  }
+
+  const parsed = parseGeoPasteInput(raw);
+  if (!parsed) {
+    statusEl.classList.remove("is-good");
+    statusEl.classList.add("is-error");
+    statusEl.textContent = "Couldn't recognize that as coordinates — try a decimal pair, a Google/Apple Maps link, DMS, or a geo: URI.";
+    return;
+  }
+
+  state.geo.latitude = parsed.latitude;
+  state.geo.longitude = parsed.longitude;
+  if (parsed.altitude) state.geo.altitude = parsed.altitude;
+  $("geo-latitude").value = parsed.latitude;
+  $("geo-longitude").value = parsed.longitude;
+  if (parsed.altitude) $("geo-altitude").value = parsed.altitude;
+
+  const check = updateGeoValidationUI();
+  statusEl.classList.toggle("is-error", !check.valid);
+  statusEl.classList.toggle("is-good", check.valid);
+  statusEl.textContent = check.valid
+    ? `Parsed: ${parsed.latitude}, ${parsed.longitude}${parsed.altitude ? `, ${parsed.altitude} m` : ""}`
+    : (check.errors.latitude || check.errors.longitude || check.errors.altitude || "Parsed, but those values are out of range.");
+  scheduleRenderDebounced();
+}
+// "paste" fires before the browser has actually written the clipboard text
+// into the field, so the parse has to wait a tick; "change" (fires on blur
+// or Enter) catches someone typing or hand-editing the same field instead.
+$("geo-paste").addEventListener("paste", () => setTimeout(handleGeoPasteInput, 0));
+$("geo-paste").addEventListener("change", handleGeoPasteInput);
 
 $("ecc-level").addEventListener("change", (e) => { state.ecc = e.target.value; scheduleRender(); });
 $("margin").addEventListener("input", (e) => {
@@ -1546,7 +1653,11 @@ $("btn-reset").addEventListener("click", () => {
   $("logo-thumb").innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>`;
   $("upload-label").textContent = "Add a logo";
   $("logo-remove").hidden = true;
+  $("geo-paste").value = "";
+  $("geo-paste-status").classList.remove("is-error", "is-good");
+  $("geo-paste-status").textContent = GEO_PASTE_HELP_TEXT;
   syncUIFromState();
+  updateGeoValidationUI();
   scheduleRender();
 });
 
@@ -1564,6 +1675,7 @@ function syncUIFromState() {
   $("wifi-hidden").checked = state.wifi.hidden;
   VCARD_FIELDS.forEach(([id, key]) => { $(id).value = state.vcard[key]; });
   EMAIL_FIELDS.forEach(([id, key]) => { $(id).value = state.email[key]; });
+  GEO_FIELDS.forEach(([id, key]) => { $(id).value = state.geo[key]; });
   updateContentTypeUI();
   updateWifiPasswordVisibility();
   $("ecc-level").value = state.ecc;
@@ -1791,6 +1903,112 @@ function buildMailtoPayload() {
   return `mailto:${mailtoEncodeAddressList(m.to)}${query}`;
 }
 
+// geo: is RFC 5870 — vendor-neutral (unlike a Google/Apple Maps URL), and
+// natively recognized by both iOS and Android, which open the person's
+// default maps app. Altitude is the only other field the RFC defines, so
+// that's the only optional extra exposed here; things like Android's
+// non-standard "q="/"z=" query params are skipped to stay spec-clean.
+function buildGeoPayload() {
+  const g = state.geo;
+  const lat = g.latitude.trim();
+  const lon = g.longitude.trim();
+  const alt = g.altitude.trim();
+  return alt ? `geo:${lat},${lon},${alt}` : `geo:${lat},${lon}`;
+}
+
+// WGS-84 bounds: latitude runs pole-to-pole, longitude wraps at the
+// antimeridian on both sides. Anything outside these still "looks" like a
+// number, so it needs an explicit range check rather than relying on
+// parseFloat/Number.isFinite alone.
+const GEO_LAT_RANGE = [-90, 90];
+const GEO_LON_RANGE = [-180, 180];
+
+// null = field left blank, NaN = field has text that isn't a number.
+// Kept distinct so callers can tell "not filled in yet" apart from
+// "typed something invalid" without a second lookup.
+function parseGeoNumber(raw) {
+  const t = raw.trim();
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function validateGeo(g) {
+  const lat = parseGeoNumber(g.latitude);
+  const lon = parseGeoNumber(g.longitude);
+  const alt = parseGeoNumber(g.altitude);
+  const errors = { latitude: null, longitude: null, altitude: null };
+
+  if (lat === null) errors.latitude = "Latitude is required.";
+  else if (Number.isNaN(lat)) errors.latitude = "Latitude must be a number.";
+  else if (lat < GEO_LAT_RANGE[0] || lat > GEO_LAT_RANGE[1]) errors.latitude = "Latitude must be between -90 and 90.";
+
+  if (lon === null) errors.longitude = "Longitude is required.";
+  else if (Number.isNaN(lon)) errors.longitude = "Longitude must be a number.";
+  else if (lon < GEO_LON_RANGE[0] || lon > GEO_LON_RANGE[1]) errors.longitude = "Longitude must be between -180 and 180.";
+
+  if (Number.isNaN(alt)) errors.altitude = "Altitude must be a number.";
+
+  return { valid: !errors.latitude && !errors.longitude && !errors.altitude, errors, lat, lon, alt };
+}
+
+// Turns a wide variety of copy/paste sources into a lat/lon(/alt) triple.
+// Checked from most to least specific, so a string that could ambiguously
+// match more than one pattern resolves the way a person would expect —
+// e.g. a Maps URL's zoom level or place ID never gets mistaken for the
+// coordinate itself.
+function parseGeoPasteInput(raw) {
+  const s = raw.trim();
+  if (!s) return null;
+
+  // A geo: URI is already exactly what this tool produces, so it round-trips.
+  let m = s.match(/^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:,(-?\d+(?:\.\d+)?))?/i);
+  if (m) return { latitude: m[1], longitude: m[2], altitude: m[3] || "" };
+
+  // Google Maps place-pin links encode the exact marker as !3d<lat>!4d<lon>,
+  // which is more precise than the @lat,lon map-center coordinate the same
+  // URL usually also carries — so this is checked before the @ pattern.
+  m = s.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/);
+  if (m) return { latitude: m[1], longitude: m[2], altitude: "" };
+
+  // Google Maps map-center URL, e.g. .../@40.7128,-74.0060,15z
+  m = s.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  if (m) return { latitude: m[1], longitude: m[2], altitude: "" };
+
+  // Query-param forms: Apple Maps ll=/sll=, Google Maps q=lat,lon.
+  m = s.match(/[?&](?:ll|sll|q)=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/i);
+  if (m) return { latitude: m[1], longitude: m[2], altitude: "" };
+
+  // DMS, e.g. 40°42'46.1"N 74°00'21.6"W. Matched by hemisphere letter
+  // rather than position, since people write lat/lon in either order, and
+  // the degree/minute/second symbols are optional so plain-space-separated
+  // input ("40 42 46.1 N") still parses.
+  const dms = /(\d{1,3})[°:\s]+(\d{1,2})['\u2019:\s]+(\d{1,2}(?:\.\d+)?)["\u201d]?\s*([NSEWnsew])/g;
+  const dmsMatches = [...s.matchAll(dms)];
+  if (dmsMatches.length >= 2) {
+    const toDecimal = (deg, min, sec, hemi) => {
+      const value = Number((Number(deg) + Number(min) / 60 + Number(sec) / 3600).toFixed(6));
+      return /[SW]/i.test(hemi) ? -value : value;
+    };
+    const points = dmsMatches.map(([, d, mi, se, h]) => ({ hemi: h.toUpperCase(), value: toDecimal(d, mi, se, h) }));
+    const latPoint = points.find((p) => p.hemi === "N" || p.hemi === "S");
+    const lonPoint = points.find((p) => p.hemi === "E" || p.hemi === "W");
+    if (latPoint && lonPoint) {
+      return { latitude: String(latPoint.value), longitude: String(lonPoint.value), altitude: "" };
+    }
+  }
+
+  // Plain decimal pair, comma- or whitespace-separated, with an optional
+  // third number read as altitude — covers coordinates copied straight out
+  // of a maps app's search box or share sheet. Anchored to the whole
+  // trimmed string so it can't fire on a fragment inside a URL that the
+  // patterns above already had a shot at.
+  m = s.match(/^(-?\d{1,3}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)(?:\s*[,\s]\s*(-?\d+(?:\.\d+)?))?$/);
+  if (m) return { latitude: m[1], longitude: m[2], altitude: m[3] || "" };
+
+  return null;
+}
+
 function getPayloadString() {
   if (state.qrType === "phone") {
     return state.phone.number.trim() ? buildTelPayload() : "";
@@ -1806,6 +2024,9 @@ function getPayloadString() {
   }
   if (state.qrType === "email") {
     return state.email.to.trim() ? buildMailtoPayload() : "";
+  }
+  if (state.qrType === "geo") {
+    return validateGeo(state.geo).valid ? buildGeoPayload() : "";
   }
   return state.data;
 }
@@ -1876,18 +2097,29 @@ async function render() {
 
   if (!text) {
     mount.innerHTML = EMPTY_PLACEHOLDER;
-    status.classList.remove("is-error");
-    status.textContent = state.qrType === "phone"
-      ? "Add a phone number to get started."
-      : state.qrType === "sms"
-      ? "Add a phone number to get started."
-      : state.qrType === "wifi"
-      ? "Add a network name (SSID) to get started."
-      : state.qrType === "vcard"
-      ? "Add a first or last name to get started."
-      : state.qrType === "email"
-      ? "Add a recipient address to get started."
-      : "Add some text or a link to get started.";
+    if (state.qrType === "geo") {
+      // Distinguish "nothing entered yet" from "entered but out of range" —
+      // the field-level red borders already flag which one, this line just
+      // says what's wrong instead of repeating the generic prompt.
+      const g = validateGeo(state.geo);
+      const touched = state.geo.latitude.trim() || state.geo.longitude.trim() || state.geo.altitude.trim();
+      const message = touched && (g.errors.latitude || g.errors.longitude || g.errors.altitude);
+      status.classList.toggle("is-error", !!message);
+      status.textContent = message || "Add a latitude and longitude to get started.";
+    } else {
+      status.classList.remove("is-error");
+      status.textContent = state.qrType === "phone"
+        ? "Add a phone number to get started."
+        : state.qrType === "sms"
+        ? "Add a phone number to get started."
+        : state.qrType === "wifi"
+        ? "Add a network name (SSID) to get started."
+        : state.qrType === "vcard"
+        ? "Add a first or last name to get started."
+        : state.qrType === "email"
+        ? "Add a recipient address to get started."
+        : "Add some text or a link to get started.";
+    }
     setExportButtonsEnabled(false);
     lastComposite = null;
     return;
