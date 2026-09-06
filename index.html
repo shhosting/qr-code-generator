@@ -461,6 +461,16 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
   margin: 0 auto 5px;
 }
 
+/* Matches checksum-verifier's .foot: sits inside <main>, directly below
+   the tool itself, rather than in the shared footer. */
+.tool-foot {
+  font-size: 12px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-top: 24px;
+  line-height: 1.6;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
 }
@@ -822,10 +832,11 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
       </div>
     </div>
   </div>
+
+  <div class="tool-foot">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser.</div>
 </main>
 
 <footer>
-  <p class="tool-disclaimer">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser.</p>
   <p class="tool-disclaimer">This tool was built with the help of various AI agents, models, and platforms. Its code is <a href="https://github.com/shhosting/qr-code-generator">open source.</a></p>
   <span class="footer-credit">
     <span class="footer-group">&copy; 2026 shhosting.net &middot; <a href="mailto:contact@shhosting.net">contact@shhosting.net</a></span>
