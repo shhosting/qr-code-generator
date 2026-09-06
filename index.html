@@ -396,6 +396,28 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
 .copy-icon-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 .copy-icon-btn svg { width: 16px; height: 16px; }
 
+.password-field-wrap { position: relative; }
+.password-field-wrap input { padding-right: 2.3rem; }
+.visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease;
+}
+.visibility-toggle:hover { color: var(--accent); }
+.visibility-toggle svg { width: 17px; height: 17px; }
+
 .export-row {
   margin-top: 1.1rem;
   display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: flex-end;
@@ -533,7 +555,14 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                 </div>
                 <div class="field" id="wifi-password-field">
                   <label class="label" for="wifi-password">Password</label>
-                  <input type="password" id="wifi-password" spellcheck="false" autocomplete="off" placeholder="">
+                  <div class="password-field-wrap">
+                    <input type="password" id="wifi-password" spellcheck="false" autocomplete="off" placeholder="">
+                    <button type="button" class="visibility-toggle" id="wifi-password-toggle" aria-label="Show password" aria-pressed="false">
+                      <svg id="wifi-password-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
               <label class="checkline">
@@ -1177,6 +1206,17 @@ $("wifi-ssid").addEventListener("input", (e) => {
 $("wifi-password").addEventListener("input", (e) => {
   state.wifi.password = e.target.value;
   scheduleRenderDebounced();
+});
+const EYE_ICON = '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>';
+const EYE_OFF_ICON = '<path d="M3 3l18 18M10.6 10.6a2.6 2.6 0 0 0 3.7 3.7M9.9 5.1A11 11 0 0 1 12 5c7 0 11 7 11 7a13.5 13.5 0 0 1-3.1 3.8M6.2 6.3A13.9 13.9 0 0 0 1 12s4 7 11 7a10.7 10.7 0 0 0 4-.8"/>';
+$("wifi-password-toggle").addEventListener("click", () => {
+  const input = $("wifi-password");
+  const btn = $("wifi-password-toggle");
+  const willShow = input.type === "password";
+  input.type = willShow ? "text" : "password";
+  btn.setAttribute("aria-pressed", String(willShow));
+  btn.setAttribute("aria-label", willShow ? "Hide password" : "Show password");
+  $("wifi-password-toggle-icon").innerHTML = willShow ? EYE_OFF_ICON : EYE_ICON;
 });
 $("wifi-security").addEventListener("change", (e) => {
   state.wifi.security = e.target.value;
