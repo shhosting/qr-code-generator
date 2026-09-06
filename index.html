@@ -936,7 +936,7 @@ function defaultState() {
       dots: { color: "#1a1712", gradient: null },
       cornersSquare: { color: "#d97706", gradient: null },
       cornersDot: { color: "#d97706", gradient: null },
-      background: { color: "#ffffff", gradient: null, round: 0 }
+      background: { color: "#ffffff", gradient: null, round: 0, transparent: false }
     },
     logo: {
       enabled: false,
@@ -1030,7 +1030,7 @@ fillSelect($("wifi-security"), WIFI_SECURITY_OPTIONS);
 function colorGroupHtml(key, label, color) {
   const up = color.toUpperCase();
   return `
-  <div class="field">
+  <div class="field" id="${key}-field">
     <span class="label">${label}</span>
     <div class="color-row">
       <div class="color-field">
@@ -1076,7 +1076,11 @@ $("colors-body").innerHTML = [
   colorGroupHtml("cornersDot", "Corner dot color", state.colors.cornersDot.color),
   colorGroupHtml("background", "Background color", state.colors.background.color)
 ].join('<hr class="divider">') + `
-  <div class="field">
+  <label class="checkline">
+    <input type="checkbox" id="bg-transparent">
+    Transparent background
+  </label>
+  <div class="field" id="bg-round-field">
     <span class="label">Background corner rounding <small id="bg-round-value">0%</small></span>
     <input type="range" id="bg-round" min="0" max="50" step="1" value="0">
   </div>`;
@@ -1148,6 +1152,17 @@ $("bg-round").addEventListener("input", (e) => {
   $("bg-round-value").textContent = `${e.target.value}%`;
   state.colors.background.round = parseInt(e.target.value, 10);
   scheduleRenderSmooth();
+});
+
+function updateBgTransparencyUI() {
+  const on = state.colors.background.transparent;
+  $("background-field").hidden = on;
+  $("bg-round-field").hidden = on;
+}
+$("bg-transparent").addEventListener("change", (e) => {
+  state.colors.background.transparent = e.target.checked;
+  updateBgTransparencyUI();
+  scheduleRender();
 });
 
 /* =================================================================
@@ -1332,7 +1347,7 @@ function applyPreset(p) {
   state.colors.dots = { color: p.dots, gradient: null };
   state.colors.cornersSquare = { color: p.corners, gradient: null };
   state.colors.cornersDot = { color: p.corners, gradient: null };
-  state.colors.background = { color: p.background, gradient: null, round: state.colors.background.round };
+  state.colors.background = { color: p.background, gradient: null, round: state.colors.background.round, transparent: state.colors.background.transparent };
   syncUIFromState();
   scheduleRender();
 }
@@ -1390,6 +1405,8 @@ function syncUIFromState() {
   });
   $("bg-round").value = state.colors.background.round;
   $("bg-round-value").textContent = `${state.colors.background.round}%`;
+  $("bg-transparent").checked = state.colors.background.transparent;
+  updateBgTransparencyUI();
 
   $("logo-size").value = state.logo.size; $("logo-size-value").textContent = `${state.logo.size}%`;
   $("logo-margin").value = state.logo.margin; $("logo-margin-value").textContent = `${state.logo.margin} px`;
@@ -1519,7 +1536,10 @@ function buildQrOptions(logoDataUrl) {
     dotsOptions: Object.assign({ type: state.dotsType }, colorOptsFor(c.dots)),
     cornersSquareOptions: Object.assign({ type: state.cornersSquareType }, colorOptsFor(c.cornersSquare)),
     cornersDotOptions: Object.assign({ type: state.cornersDotType }, colorOptsFor(c.cornersDot)),
-    backgroundOptions: Object.assign({ round: (c.background.round || 0) / 100 }, colorOptsFor(c.background)),
+    backgroundOptions: Object.assign(
+      { round: (c.background.round || 0) / 100 },
+      c.background.transparent ? { color: null, gradient: null } : colorOptsFor(c.background)
+    ),
     // Same reused-instance/per-key-merge issue as colorOptsFor's gradient
     // field: "image" has to be passed explicitly as null on every render
     // once a logo has ever been set. Omitting the key when the logo is
