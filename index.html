@@ -748,6 +748,31 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                 <input type="text" id="geo-altitude" spellcheck="false" placeholder="Meters above sea level" inputmode="decimal">
               </div>
             </div>
+
+            <div id="content-crypto" class="content-type-fields" hidden>
+              <div class="field">
+                <span class="label">Cryptocurrency</span>
+                <select id="crypto-coin"></select>
+              </div>
+              <div class="field">
+                <label class="label" for="crypto-address">Address</label>
+                <input type="text" id="crypto-address" spellcheck="false" placeholder="bc1q...">
+              </div>
+              <div class="field" id="crypto-amount-field">
+                <label class="label" for="crypto-amount">Amount (optional)</label>
+                <input type="text" id="crypto-amount" spellcheck="false" inputmode="decimal" placeholder="0.01">
+              </div>
+              <div class="field" id="crypto-label-field">
+                <label class="label" for="crypto-label" id="crypto-label-label">Label (optional)</label>
+                <input type="text" id="crypto-label" spellcheck="false" placeholder="Coffee fund">
+              </div>
+              <div class="field" id="crypto-note-field">
+                <label class="label" for="crypto-note" id="crypto-note-label">Message (optional)</label>
+                <input type="text" id="crypto-note" spellcheck="false" placeholder="Thanks for the support!">
+              </div>
+              <p class="help" id="crypto-help">Amount is in BTC. Leave blank to let the sender choose.</p>
+              <p class="help">This tool doesn't validate the address — double-check it before sharing, since crypto payments can't be reversed.</p>
+            </div>
           </div>
         </details>
 
@@ -949,12 +974,31 @@ const CORNER_TYPE_OPTIONS = [
 const QR_TYPE_OPTIONS = [
   ["text", "Text or link"], ["wifi", "Wi-Fi network"], ["vcard", "Contact card"],
   ["phone", "Phone call"], ["sms", "Text message"], ["email", "Email message"],
-  ["calendar", "Calendar event"], ["geo", "Location"]
+  ["calendar", "Calendar event"], ["geo", "Location"], ["crypto", "Crypto payment"]
 ];
 // Same single-source-of-truth pattern as VCARD_FIELDS/EMAIL_FIELDS below.
 const PHONE_FIELDS = [["phone-number", "number"]];
 const SMS_FIELDS = [["sms-number", "number"], ["sms-message", "message"]];
 const GEO_FIELDS = [["geo-latitude", "latitude"], ["geo-longitude", "longitude"], ["geo-altitude", "altitude"]];
+
+// One source of truth per coin: dropdown label, address placeholder, and
+// whether the URI format has room for a label/note at all. Bitcoin,
+// Litecoin, Dogecoin, and Bitcoin Cash all copy BIP21's label/message
+// pair; Monero has its own differently-named equivalents
+// (recipient_name/tx_description); Ethereum's EIP-681 has neither, since
+// it's a raw transaction request rather than a described payment.
+const CRYPTO_COINS = {
+  bitcoin: { dropdownLabel: "Bitcoin (BTC)", ticker: "BTC", addressPlaceholder: "bc1q...", labelText: "Label", noteText: "Message" },
+  ethereum: { dropdownLabel: "Ethereum (ETH)", ticker: "ETH", addressPlaceholder: "0x..." },
+  litecoin: { dropdownLabel: "Litecoin (LTC)", ticker: "LTC", addressPlaceholder: "ltc1q...", labelText: "Label", noteText: "Message" },
+  bitcoincash: { dropdownLabel: "Bitcoin Cash (BCH)", ticker: "BCH", addressPlaceholder: "bitcoincash:q...", labelText: "Label", noteText: "Message" },
+  dogecoin: { dropdownLabel: "Dogecoin (DOGE)", ticker: "DOGE", addressPlaceholder: "D...", labelText: "Label", noteText: "Message" },
+  monero: { dropdownLabel: "Monero (XMR)", ticker: "XMR", addressPlaceholder: "4...", labelText: "Recipient name", noteText: "Description" }
+};
+const CRYPTO_COIN_OPTIONS = Object.entries(CRYPTO_COINS).map(([id, info]) => [id, info.dropdownLabel]);
+const CRYPTO_FIELDS = [
+  ["crypto-address", "address"], ["crypto-amount", "amount"], ["crypto-label", "label"], ["crypto-note", "note"]
+];
 // Single source of truth for the vcard field set: drives event wiring and
 // UI sync so those two lists can't drift out of sync with each other.
 const VCARD_FIELDS = [
@@ -1155,6 +1199,10 @@ function defaultState() {
     geo: {
       latitude: "", longitude: "", altitude: ""
     },
+    crypto: {
+      coin: "bitcoin",
+      address: "", amount: "", label: "", note: ""
+    },
     ecc: "M",
     margin: 16,
     exportSize: 1024,
@@ -1253,6 +1301,7 @@ fillSelect($("corners-square-type"), CORNER_TYPE_OPTIONS);
 fillSelect($("corners-dot-type"), CORNER_TYPE_OPTIONS);
 fillSelect($("qr-type"), QR_TYPE_OPTIONS);
 fillSelect($("wifi-security"), WIFI_SECURITY_OPTIONS);
+fillSelect($("crypto-coin"), CRYPTO_COIN_OPTIONS);
 
 /* =================================================================
    Colors panel (built dynamically to avoid repeating markup 4x)
@@ -1435,6 +1484,7 @@ function updateContentTypeUI() {
   $("content-email").hidden = state.qrType !== "email";
   $("content-calendar").hidden = state.qrType !== "calendar";
   $("content-geo").hidden = state.qrType !== "geo";
+  $("content-crypto").hidden = state.qrType !== "crypto";
 }
 function updateWifiPasswordVisibility() {
   $("wifi-password-field").hidden = state.wifi.security === "nopass";
@@ -1473,6 +1523,46 @@ function updateCalendarValidationUI() {
   helpEl.textContent = message || (c.allDay
     ? 'Leave "Ends" blank for a single-day event.'
     : 'Leave "Ends" blank for a 1-hour default. 24-hour time.');
+}
+
+// Deliberately stricter than a general decimal parser: no leading +/-, no
+// scientific notation, no thousands separators. All four BIP21-family
+// payloads and Monero's tx_amount expect a plain decimal, and this exact
+// string gets dropped into the URI verbatim — anything a wallet's own
+// parser might reject is rejected here first instead of ending up baked
+// into a QR code that fails silently when scanned.
+function validateCryptoAmount(raw) {
+  const s = raw.trim();
+  if (!s) return { valid: true, empty: true };
+  if (!/^\d+(\.\d+)?$/.test(s)) return { valid: false, error: "Amount must be a plain positive number, e.g. 0.01." };
+  return { valid: true };
+}
+
+function updateCryptoValidationUI() {
+  const result = validateCryptoAmount(state.crypto.amount);
+  $("crypto-amount-field").classList.toggle("has-error", !result.valid);
+  const info = CRYPTO_COINS[state.crypto.coin];
+  const helpEl = $("crypto-help");
+  helpEl.classList.toggle("is-error", !result.valid);
+  helpEl.textContent = !result.valid ? result.error : (state.crypto.coin === "ethereum"
+    ? "Amount is in ETH — encoded as wei per EIP-681. Leave blank to let the sender choose."
+    : `Amount is in ${info.ticker}. Leave blank to let the sender choose.`);
+}
+
+// Ethereum's EIP-681 has no label/message parameters at all (it's a raw
+// transaction request, not a described payment), so those two fields are
+// hidden rather than just left to produce a silently-ignored value.
+function applyCryptoCoinUI() {
+  const info = CRYPTO_COINS[state.crypto.coin];
+  $("crypto-address").placeholder = info.addressPlaceholder;
+  const supportsLabelNote = !!info.labelText;
+  $("crypto-label-field").hidden = !supportsLabelNote;
+  $("crypto-note-field").hidden = !supportsLabelNote;
+  if (supportsLabelNote) {
+    $("crypto-label-label").textContent = `${info.labelText} (optional)`;
+    $("crypto-note-label").textContent = `${info.noteText} (optional)`;
+  }
+  updateCryptoValidationUI();
 }
 
 $("qr-type").addEventListener("change", (e) => {
@@ -1574,6 +1664,19 @@ $("calendar-all-day").addEventListener("change", (e) => {
   state.calendar.allDay = allDay;
   applyCalendarAllDayUI();
   scheduleRender();
+});
+
+$("crypto-coin").addEventListener("change", (e) => {
+  state.crypto.coin = e.target.value;
+  applyCryptoCoinUI();
+  scheduleRender();
+});
+CRYPTO_FIELDS.forEach(([id, key]) => {
+  $(id).addEventListener("input", (e) => {
+    state.crypto[key] = e.target.value;
+    if (key === "amount") updateCryptoValidationUI();
+    scheduleRenderDebounced();
+  });
 });
 
 // The default help copy under the paste field, restored whenever it's
@@ -1792,6 +1895,9 @@ function syncUIFromState() {
   $("calendar-all-day").checked = state.calendar.allDay;
   applyCalendarAllDayUI();
   GEO_FIELDS.forEach(([id, key]) => { $(id).value = state.geo[key]; });
+  CRYPTO_FIELDS.forEach(([id, key]) => { $(id).value = state.crypto[key]; });
+  $("crypto-coin").value = state.crypto.coin;
+  applyCryptoCoinUI();
   updateContentTypeUI();
   updateWifiPasswordVisibility();
   $("ecc-level").value = state.ecc;
@@ -2133,6 +2239,46 @@ function buildGeoPayload() {
   return alt ? `geo:${lat},${lon},${alt}` : `geo:${lat},${lon}`;
 }
 
+function buildCryptoPayload() {
+  const c = state.crypto;
+  const address = c.address.trim();
+  const amount = c.amount.trim();
+  const label = c.label.trim();
+  const note = c.note.trim();
+
+  if (c.coin === "ethereum") {
+    // EIP-681 requires the amount in wei, but explicitly recommends
+    // scientific notation for exactly this case — appending "e18" to the
+    // typed decimal ETH amount reaches the same value as multiplying by
+    // 10^18 without ever doing that multiplication in floating-point,
+    // which would risk rounding error on amounts with many decimal places.
+    return amount ? `ethereum:${address}?value=${amount}e18` : `ethereum:${address}`;
+  }
+
+  if (c.coin === "monero") {
+    const params = [];
+    if (amount) params.push(`tx_amount=${amount}`);
+    if (label) params.push(`recipient_name=${encodeURIComponent(label)}`);
+    if (note) params.push(`tx_description=${encodeURIComponent(note)}`);
+    return params.length ? `monero:${address}?${params.join("&")}` : `monero:${address}`;
+  }
+
+  // Bitcoin, Litecoin, Dogecoin, and Bitcoin Cash never wrote their own URI
+  // spec — they all copy BIP21's "scheme:address?amount=&label=&message="
+  // shape verbatim, just with the scheme name swapped.
+  const scheme = c.coin;
+  // CashAddr (Bitcoin Cash's modern address format) can optionally include
+  // its own "bitcoincash:" network prefix as part of the address text
+  // itself, so a pasted address needs that stripped first or the URI ends
+  // up with the scheme duplicated ("bitcoincash:bitcoincash:q...").
+  const cleanAddress = c.coin === "bitcoincash" ? address.replace(/^(bitcoincash|bchtest|bchreg):/i, "") : address;
+  const params = [];
+  if (amount) params.push(`amount=${amount}`);
+  if (label) params.push(`label=${encodeURIComponent(label)}`);
+  if (note) params.push(`message=${encodeURIComponent(note)}`);
+  return params.length ? `${scheme}:${cleanAddress}?${params.join("&")}` : `${scheme}:${cleanAddress}`;
+}
+
 // WGS-84 bounds: latitude runs pole-to-pole, longitude wraps at the
 // antimeridian on both sides. Anything outside these still "looks" like a
 // number, so it needs an explicit range check rather than relying on
@@ -2249,6 +2395,10 @@ function getPayloadString() {
   if (state.qrType === "geo") {
     return validateGeo(state.geo).valid ? buildGeoPayload() : "";
   }
+  if (state.qrType === "crypto") {
+    if (!state.crypto.address.trim()) return "";
+    return validateCryptoAmount(state.crypto.amount).valid ? buildCryptoPayload() : "";
+  }
   return state.data;
 }
 
@@ -2338,6 +2488,15 @@ async function render() {
       const message = (start && !start.valid && start.error) || (end && !end.valid && end.error);
       status.classList.toggle("is-error", !!message);
       status.textContent = message || "Add an event title and start time to get started.";
+    } else if (state.qrType === "crypto") {
+      // Address itself isn't format-validated (that's a much deeper rabbit
+      // hole per-coin — Base58Check, Bech32, EIP-55 checksums, CashAddr —
+      // than this tool takes on), so the only thing that can actually fail
+      // here is the amount format, same touched-gating as the others above.
+      const amountCheck = validateCryptoAmount(state.crypto.amount);
+      const message = state.crypto.amount.trim() && !amountCheck.valid && amountCheck.error;
+      status.classList.toggle("is-error", !!message);
+      status.textContent = message || "Add a wallet address to get started.";
     } else {
       status.classList.remove("is-error");
       status.textContent = state.qrType === "phone"
