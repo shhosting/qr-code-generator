@@ -706,16 +706,16 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
                 All-day event
               </label>
               <div class="field-row">
-                <div class="field">
+                <div class="field" id="calendar-start-field">
                   <label class="label" for="calendar-start">Starts</label>
-                  <input type="datetime-local" id="calendar-start">
+                  <input type="text" id="calendar-start" spellcheck="false" placeholder="YYYY-MM-DD HH:MM">
                 </div>
-                <div class="field">
+                <div class="field" id="calendar-end-field">
                   <label class="label" for="calendar-end">Ends</label>
-                  <input type="datetime-local" id="calendar-end">
+                  <input type="text" id="calendar-end" spellcheck="false" placeholder="YYYY-MM-DD HH:MM">
                 </div>
               </div>
-              <p class="help" id="calendar-end-help">Leave "Ends" blank for a 1-hour default.</p>
+              <p class="help" id="calendar-end-help">Leave "Ends" blank for a 1-hour default. 24-hour time.</p>
               <div class="field">
                 <label class="label" for="calendar-location">Location</label>
                 <input type="text" id="calendar-location" spellcheck="false" placeholder="Conference room B">
@@ -911,7 +911,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
     </div>
   </div>
 
-  <div class="tool-foot">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser. Codes are static: the content is baked in at generation time, so edit-after-print or scan tracking isn't supported. Regenerate a new code if the underlying info changes.</div>
+  <div class="tool-foot">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser.<br>Codes are static: the content is baked in at generation time, so edit-after-print or scan tracking isn't supported. Regenerate a new code if the underlying info changes.</div>
 </main>
 
 <footer>
@@ -969,8 +969,8 @@ const EMAIL_FIELDS = [
   ["email-cc", "cc"], ["email-bcc", "bcc"]
 ];
 // Only the plain text fields — start/end/all-day are wired separately since
-// toggling all-day swaps the start/end inputs between date and
-// datetime-local, which a blind value-copy loop can't handle.
+// they need format validation and placeholder swapping that a blind
+// value-copy loop can't handle.
 const CALENDAR_FIELDS = [
   ["calendar-title", "title"], ["calendar-location", "location"], ["calendar-description", "description"]
 ];
@@ -1439,19 +1439,40 @@ function updateContentTypeUI() {
 function updateWifiPasswordVisibility() {
   $("wifi-password-field").hidden = state.wifi.security === "nopass";
 }
-// Swaps the start/end inputs between "date" and "datetime-local" to match
-// the all-day toggle, and re-applies state's current values afterward
-// (setting .value on a date input to a datetime-local-shaped string, or
-// vice versa, is silently ignored by the browser rather than erroring).
-function applyCalendarDateInputType() {
-  const type = state.calendar.allDay ? "date" : "datetime-local";
-  $("calendar-start").type = type;
-  $("calendar-end").type = type;
+// Start/end are plain text fields (not native date/datetime-local inputs) so
+// their displayed format is always exactly "YYYY-MM-DD[ HH:MM]" in 24-hour
+// time, regardless of the browser's locale — native date pickers have no
+// standard way to force that display format, and their format varies by
+// browser/OS. Manual parsing (parseCalendarInput, defined near
+// buildCalendarPayload) and validation below take the place of what the
+// native picker would otherwise guarantee.
+function applyCalendarAllDayUI() {
+  const placeholder = state.calendar.allDay ? "YYYY-MM-DD" : "YYYY-MM-DD HH:MM";
+  $("calendar-start").placeholder = placeholder;
+  $("calendar-end").placeholder = placeholder;
   $("calendar-start").value = state.calendar.start;
   $("calendar-end").value = state.calendar.end;
-  $("calendar-end-help").textContent = state.calendar.allDay
+  updateCalendarValidationUI();
+}
+
+// Puts a red border on start/end if what's typed there doesn't parse, and
+// swaps the help line beneath them to the specific reason — only once the
+// person has put something in, so an untouched blank field doesn't open
+// already "wrong" (same touched-gating as updateGeoValidationUI).
+function updateCalendarValidationUI() {
+  const c = state.calendar;
+  const start = c.start.trim() ? parseCalendarInput(c.start, c.allDay) : null;
+  const end = c.end.trim() ? parseCalendarInput(c.end, c.allDay) : null;
+
+  $("calendar-start-field").classList.toggle("has-error", !!start && !start.valid);
+  $("calendar-end-field").classList.toggle("has-error", !!end && !end.valid);
+
+  const helpEl = $("calendar-end-help");
+  const message = (start && !start.valid && start.error) || (end && !end.valid && end.error);
+  helpEl.classList.toggle("is-error", !!message);
+  helpEl.textContent = message || (c.allDay
     ? 'Leave "Ends" blank for a single-day event.'
-    : 'Leave "Ends" blank for a 1-hour default.';
+    : 'Leave "Ends" blank for a 1-hour default. 24-hour time.');
 }
 
 $("qr-type").addEventListener("change", (e) => {
@@ -1529,26 +1550,29 @@ CALENDAR_FIELDS.forEach(([id, key]) => {
 });
 $("calendar-start").addEventListener("input", (e) => {
   state.calendar.start = e.target.value;
+  updateCalendarValidationUI();
   scheduleRenderDebounced();
 });
 $("calendar-end").addEventListener("input", (e) => {
   state.calendar.end = e.target.value;
+  updateCalendarValidationUI();
   scheduleRenderDebounced();
 });
 $("calendar-all-day").addEventListener("change", (e) => {
   const allDay = e.target.checked;
-  // Converting between date and datetime-local either drops the
-  // time-of-day or needs one invented, so the person's existing picks
-  // aren't silently discarded by the type swap in applyCalendarDateInputType.
+  // Converting between date-only and date+time text either drops the
+  // time-of-day (first 10 chars are always the YYYY-MM-DD part) or needs
+  // a sensible one invented, so the person's existing input isn't
+  // silently discarded by the placeholder swap in applyCalendarAllDayUI.
   if (allDay) {
-    if (state.calendar.start) state.calendar.start = state.calendar.start.slice(0, 10);
-    if (state.calendar.end) state.calendar.end = state.calendar.end.slice(0, 10);
+    state.calendar.start = state.calendar.start.slice(0, 10);
+    state.calendar.end = state.calendar.end.slice(0, 10);
   } else {
-    if (state.calendar.start && state.calendar.start.length === 10) state.calendar.start += "T09:00";
-    if (state.calendar.end && state.calendar.end.length === 10) state.calendar.end += "T10:00";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(state.calendar.start)) state.calendar.start += " 09:00";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(state.calendar.end)) state.calendar.end += " 10:00";
   }
   state.calendar.allDay = allDay;
-  applyCalendarDateInputType();
+  applyCalendarAllDayUI();
   scheduleRender();
 });
 
@@ -1766,7 +1790,7 @@ function syncUIFromState() {
   EMAIL_FIELDS.forEach(([id, key]) => { $(id).value = state.email[key]; });
   CALENDAR_FIELDS.forEach(([id, key]) => { $(id).value = state.calendar[key]; });
   $("calendar-all-day").checked = state.calendar.allDay;
-  applyCalendarDateInputType();
+  applyCalendarAllDayUI();
   GEO_FIELDS.forEach(([id, key]) => { $(id).value = state.geo[key]; });
   updateContentTypeUI();
   updateWifiPasswordVisibility();
@@ -2032,31 +2056,60 @@ function calendarUid() {
   return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}@shhosting.net`;
 }
 
+// Parses the hand-typed "YYYY-MM-DD" (all-day) or "YYYY-MM-DD HH:MM"
+// (timed, 24-hour) text against a strict format — no locale-dependent
+// native date-input parsing involved, so the accepted format is exactly
+// what the placeholder promises on every browser. Accepts "T" as well as
+// a space between date and time so a pasted ISO/datetime-local-shaped
+// value still works without the person having to retype it.
+function parseCalendarInput(raw, allDay) {
+  const s = raw.trim();
+  if (!s) return { valid: false, empty: true };
+  const re = allDay ? /^(\d{4})-(\d{2})-(\d{2})$/ : /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/;
+  const m = s.match(re);
+  if (!m) return { valid: false, error: allDay ? "Use the format YYYY-MM-DD." : "Use the format YYYY-MM-DD HH:MM (24-hour)." };
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  const hh = allDay ? 0 : Number(m[4]);
+  const mi = allDay ? 0 : Number(m[5]);
+  if (!allDay && hh > 23) return { valid: false, error: "Hour must be 00–23." };
+  if (!allDay && mi > 59) return { valid: false, error: "Minute must be 00–59." };
+  // Catches month/day combinations that don't exist (Feb 30, Apr 31, ...):
+  // the Date constructor silently rolls those into the following month
+  // rather than rejecting them, so the rolled-over result is compared
+  // back against what was typed.
+  const date = new Date(y, mo - 1, d, hh, mi, 0);
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) {
+    return { valid: false, error: "That date doesn't exist." };
+  }
+  return { valid: true, dateStr: `${m[1]}-${m[2]}-${m[3]}`, date };
+}
+
 function buildCalendarPayload() {
   const c = state.calendar;
+  const start = parseCalendarInput(c.start, c.allDay);
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//shhosting.net//QR Code Generator//EN", "BEGIN:VEVENT"];
   lines.push(`UID:${calendarUid()}`);
   lines.push(`DTSTAMP:${formatUtcIcs(new Date())}`);
 
   if (c.allDay) {
-    const startDate = c.start;
+    const end = c.end.trim() ? parseCalendarInput(c.end, true) : null;
     // DTEND for an all-day event is exclusive per RFC 5545 §3.6.1, so a
-    // single-day event (or a blank/backwards end date, clamped to start)
-    // still needs the end pushed one day past the last inclusive day —
-    // without this the event would render as zero-length in most apps.
-    const endDate = c.end && c.end >= startDate ? c.end : startDate;
-    const exclusiveEnd = addDaysToDateStr(endDate, 1);
-    lines.push(`DTSTART;VALUE=DATE:${startDate.replace(/-/g, "")}`);
+    // single-day event (or a blank/invalid/backwards end date, clamped to
+    // start) still needs the end pushed one day past the last inclusive
+    // day — without this the event would render as zero-length in most apps.
+    const endDateStr = (end && end.valid && end.dateStr >= start.dateStr) ? end.dateStr : start.dateStr;
+    const exclusiveEnd = addDaysToDateStr(endDateStr, 1);
+    lines.push(`DTSTART;VALUE=DATE:${start.dateStr.replace(/-/g, "")}`);
     lines.push(`DTEND;VALUE=DATE:${exclusiveEnd.replace(/-/g, "")}`);
   } else {
-    const startDate = new Date(c.start);
-    let endDate = c.end ? new Date(c.end) : null;
-    // A blank or backwards end time defaults to an hour after start rather
-    // than being omitted — DTEND is optional per spec, but several
-    // calendar apps' QR scanners render an endless/zero-length block
-    // without it, so a default is friendlier than leaving it out.
-    if (!endDate || endDate <= startDate) endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-    lines.push(`DTSTART:${formatFloatingIcs(startDate)}`);
+    const end = c.end.trim() ? parseCalendarInput(c.end, false) : null;
+    // A blank, invalid, or backwards end time defaults to an hour after
+    // start rather than being omitted — DTEND is optional per spec, but
+    // several calendar apps' QR scanners render an endless/zero-length
+    // block without it, so a default is friendlier than leaving it out.
+    let endDate = (end && end.valid) ? end.date : null;
+    if (!endDate || endDate <= start.date) endDate = new Date(start.date.getTime() + 60 * 60 * 1000);
+    lines.push(`DTSTART:${formatFloatingIcs(start.date)}`);
     lines.push(`DTEND:${formatFloatingIcs(endDate)}`);
   }
 
@@ -2190,7 +2243,8 @@ function getPayloadString() {
     return state.email.to.trim() ? buildMailtoPayload() : "";
   }
   if (state.qrType === "calendar") {
-    return (state.calendar.title.trim() && state.calendar.start) ? buildCalendarPayload() : "";
+    if (!state.calendar.title.trim()) return "";
+    return parseCalendarInput(state.calendar.start, state.calendar.allDay).valid ? buildCalendarPayload() : "";
   }
   if (state.qrType === "geo") {
     return validateGeo(state.geo).valid ? buildGeoPayload() : "";
@@ -2273,6 +2327,17 @@ async function render() {
       const message = touched && (g.errors.latitude || g.errors.longitude || g.errors.altitude);
       status.classList.toggle("is-error", !!message);
       status.textContent = message || "Add a latitude and longitude to get started.";
+    } else if (state.qrType === "calendar") {
+      // Same distinction as geo above: a blank required field just gets the
+      // generic prompt, but something typed that fails to parse gets the
+      // specific reason instead — the field-level red border (via
+      // updateCalendarValidationUI) already flags which one.
+      const c = state.calendar;
+      const start = c.start.trim() ? parseCalendarInput(c.start, c.allDay) : null;
+      const end = c.end.trim() ? parseCalendarInput(c.end, c.allDay) : null;
+      const message = (start && !start.valid && start.error) || (end && !end.valid && end.error);
+      status.classList.toggle("is-error", !!message);
+      status.textContent = message || "Add an event title and start time to get started.";
     } else {
       status.classList.remove("is-error");
       status.textContent = state.qrType === "phone"
@@ -2285,8 +2350,6 @@ async function render() {
         ? "Add a first or last name to get started."
         : state.qrType === "email"
         ? "Add a recipient address to get started."
-        : state.qrType === "calendar"
-        ? "Add an event title and start time to get started."
         : "Add some text or a link to get started.";
     }
     setExportButtonsEnabled(false);
