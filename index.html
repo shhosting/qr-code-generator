@@ -696,6 +696,36 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
               </div>
             </div>
 
+            <div id="content-calendar" class="content-type-fields" hidden>
+              <div class="field">
+                <label class="label" for="calendar-title">Event title</label>
+                <input type="text" id="calendar-title" spellcheck="false" placeholder="Team standup">
+              </div>
+              <label class="checkline">
+                <input type="checkbox" id="calendar-all-day">
+                All-day event
+              </label>
+              <div class="field-row">
+                <div class="field">
+                  <label class="label" for="calendar-start">Starts</label>
+                  <input type="datetime-local" id="calendar-start">
+                </div>
+                <div class="field">
+                  <label class="label" for="calendar-end">Ends</label>
+                  <input type="datetime-local" id="calendar-end">
+                </div>
+              </div>
+              <p class="help" id="calendar-end-help">Leave "Ends" blank for a 1-hour default.</p>
+              <div class="field">
+                <label class="label" for="calendar-location">Location</label>
+                <input type="text" id="calendar-location" spellcheck="false" placeholder="Conference room B">
+              </div>
+              <div class="field">
+                <label class="label" for="calendar-description">Description</label>
+                <textarea id="calendar-description" spellcheck="false" placeholder="Optional details"></textarea>
+              </div>
+            </div>
+
             <div id="content-geo" class="content-type-fields" hidden>
               <div class="field">
                 <label class="label" for="geo-paste">Paste coordinates or a map link</label>
@@ -881,7 +911,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
     </div>
   </div>
 
-  <div class="tool-foot">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser.</div>
+  <div class="tool-foot">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser. Codes are static: the content is baked in at generation time, so edit-after-print or scan tracking isn't supported. Regenerate a new code if the underlying info changes.</div>
 </main>
 
 <footer>
@@ -919,7 +949,7 @@ const CORNER_TYPE_OPTIONS = [
 const QR_TYPE_OPTIONS = [
   ["text", "Text or link"], ["wifi", "Wi-Fi network"], ["vcard", "Contact card"],
   ["phone", "Phone call"], ["sms", "Text message"], ["email", "Email message"],
-  ["geo", "Location"]
+  ["calendar", "Calendar event"], ["geo", "Location"]
 ];
 // Same single-source-of-truth pattern as VCARD_FIELDS/EMAIL_FIELDS below.
 const PHONE_FIELDS = [["phone-number", "number"]];
@@ -937,6 +967,12 @@ const VCARD_FIELDS = [
 const EMAIL_FIELDS = [
   ["email-to", "to"], ["email-subject", "subject"], ["email-body", "body"],
   ["email-cc", "cc"], ["email-bcc", "bcc"]
+];
+// Only the plain text fields — start/end/all-day are wired separately since
+// toggling all-day swaps the start/end inputs between date and
+// datetime-local, which a blind value-copy loop can't handle.
+const CALENDAR_FIELDS = [
+  ["calendar-title", "title"], ["calendar-location", "location"], ["calendar-description", "description"]
 ];
 const WIFI_SECURITY_OPTIONS = [
   ["WPA", "WPA / WPA2 / WPA3"], ["WEP", "WEP"], ["nopass", "None (open)"]
@@ -1108,6 +1144,13 @@ function defaultState() {
     },
     email: {
       to: "", subject: "", body: "", cc: "", bcc: ""
+    },
+    calendar: {
+      title: "", location: "", description: "",
+      allDay: false,
+      // start/end are HTML date-input value strings: "YYYY-MM-DDTHH:mm"
+      // while allDay is false, "YYYY-MM-DD" while it's true.
+      start: "", end: ""
     },
     geo: {
       latitude: "", longitude: "", altitude: ""
@@ -1390,10 +1433,25 @@ function updateContentTypeUI() {
   $("content-wifi").hidden = state.qrType !== "wifi";
   $("content-vcard").hidden = state.qrType !== "vcard";
   $("content-email").hidden = state.qrType !== "email";
+  $("content-calendar").hidden = state.qrType !== "calendar";
   $("content-geo").hidden = state.qrType !== "geo";
 }
 function updateWifiPasswordVisibility() {
   $("wifi-password-field").hidden = state.wifi.security === "nopass";
+}
+// Swaps the start/end inputs between "date" and "datetime-local" to match
+// the all-day toggle, and re-applies state's current values afterward
+// (setting .value on a date input to a datetime-local-shaped string, or
+// vice versa, is silently ignored by the browser rather than erroring).
+function applyCalendarDateInputType() {
+  const type = state.calendar.allDay ? "date" : "datetime-local";
+  $("calendar-start").type = type;
+  $("calendar-end").type = type;
+  $("calendar-start").value = state.calendar.start;
+  $("calendar-end").value = state.calendar.end;
+  $("calendar-end-help").textContent = state.calendar.allDay
+    ? 'Leave "Ends" blank for a single-day event.'
+    : 'Leave "Ends" blank for a 1-hour default.';
 }
 
 $("qr-type").addEventListener("change", (e) => {
@@ -1461,6 +1519,37 @@ EMAIL_FIELDS.forEach(([id, key]) => {
     state.email[key] = e.target.value;
     scheduleRenderDebounced();
   });
+});
+
+CALENDAR_FIELDS.forEach(([id, key]) => {
+  $(id).addEventListener("input", (e) => {
+    state.calendar[key] = e.target.value;
+    scheduleRenderDebounced();
+  });
+});
+$("calendar-start").addEventListener("input", (e) => {
+  state.calendar.start = e.target.value;
+  scheduleRenderDebounced();
+});
+$("calendar-end").addEventListener("input", (e) => {
+  state.calendar.end = e.target.value;
+  scheduleRenderDebounced();
+});
+$("calendar-all-day").addEventListener("change", (e) => {
+  const allDay = e.target.checked;
+  // Converting between date and datetime-local either drops the
+  // time-of-day or needs one invented, so the person's existing picks
+  // aren't silently discarded by the type swap in applyCalendarDateInputType.
+  if (allDay) {
+    if (state.calendar.start) state.calendar.start = state.calendar.start.slice(0, 10);
+    if (state.calendar.end) state.calendar.end = state.calendar.end.slice(0, 10);
+  } else {
+    if (state.calendar.start && state.calendar.start.length === 10) state.calendar.start += "T09:00";
+    if (state.calendar.end && state.calendar.end.length === 10) state.calendar.end += "T10:00";
+  }
+  state.calendar.allDay = allDay;
+  applyCalendarDateInputType();
+  scheduleRender();
 });
 
 // The default help copy under the paste field, restored whenever it's
@@ -1675,6 +1764,9 @@ function syncUIFromState() {
   $("wifi-hidden").checked = state.wifi.hidden;
   VCARD_FIELDS.forEach(([id, key]) => { $(id).value = state.vcard[key]; });
   EMAIL_FIELDS.forEach(([id, key]) => { $(id).value = state.email[key]; });
+  CALENDAR_FIELDS.forEach(([id, key]) => { $(id).value = state.calendar[key]; });
+  $("calendar-all-day").checked = state.calendar.allDay;
+  applyCalendarDateInputType();
   GEO_FIELDS.forEach(([id, key]) => { $(id).value = state.geo[key]; });
   updateContentTypeUI();
   updateWifiPasswordVisibility();
@@ -1903,6 +1995,78 @@ function buildMailtoPayload() {
   return `mailto:${mailtoEncodeAddressList(m.to)}${query}`;
 }
 
+// RFC 5545 TEXT escaping: backslash, comma, and semicolon are
+// backslash-escaped, same three characters as vCard, and for the same
+// reason — comma/semicolon are structural in property values. Literal
+// newlines become the two-character \n sequence rather than a real line
+// break, since a real line break would start a new content line.
+function icsEscape(s) {
+  return String(s).replace(/([\\,;])/g, "\\$1").replace(/\r\n|\r|\n/g, "\\n");
+}
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+// Formats a Date using its LOCAL getters (not UTC) with no trailing "Z",
+// producing a "floating time" DTSTART/DTEND per RFC 5545 §3.3.5. Floating
+// time has no attached timezone at all — it's read by the receiving
+// calendar app as whatever its own local time is — which is what every
+// mainstream QR calendar-event generator uses, since embedding a real
+// IANA TZID would require shipping VTIMEZONE data the QR has no room for,
+// and UTC would shift the displayed time for anyone not in that zone.
+function formatFloatingIcs(d) {
+  return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+}
+// DTSTAMP is the one timestamp RFC 5545 requires in real UTC, so it uses
+// the UTC getters (unlike formatFloatingIcs above) and keeps the Z suffix.
+function formatUtcIcs(d) {
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
+}
+// Adds days to a "YYYY-MM-DD" string via Date.UTC so the month/year roll
+// over correctly, without any local-timezone/DST arithmetic touching it.
+function addDaysToDateStr(dateStr, days) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+}
+function calendarUid() {
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}@shhosting.net`;
+}
+
+function buildCalendarPayload() {
+  const c = state.calendar;
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//shhosting.net//QR Code Generator//EN", "BEGIN:VEVENT"];
+  lines.push(`UID:${calendarUid()}`);
+  lines.push(`DTSTAMP:${formatUtcIcs(new Date())}`);
+
+  if (c.allDay) {
+    const startDate = c.start;
+    // DTEND for an all-day event is exclusive per RFC 5545 §3.6.1, so a
+    // single-day event (or a blank/backwards end date, clamped to start)
+    // still needs the end pushed one day past the last inclusive day —
+    // without this the event would render as zero-length in most apps.
+    const endDate = c.end && c.end >= startDate ? c.end : startDate;
+    const exclusiveEnd = addDaysToDateStr(endDate, 1);
+    lines.push(`DTSTART;VALUE=DATE:${startDate.replace(/-/g, "")}`);
+    lines.push(`DTEND;VALUE=DATE:${exclusiveEnd.replace(/-/g, "")}`);
+  } else {
+    const startDate = new Date(c.start);
+    let endDate = c.end ? new Date(c.end) : null;
+    // A blank or backwards end time defaults to an hour after start rather
+    // than being omitted — DTEND is optional per spec, but several
+    // calendar apps' QR scanners render an endless/zero-length block
+    // without it, so a default is friendlier than leaving it out.
+    if (!endDate || endDate <= startDate) endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+    lines.push(`DTSTART:${formatFloatingIcs(startDate)}`);
+    lines.push(`DTEND:${formatFloatingIcs(endDate)}`);
+  }
+
+  lines.push(`SUMMARY:${icsEscape(c.title.trim())}`);
+  if (c.location.trim()) lines.push(`LOCATION:${icsEscape(c.location.trim())}`);
+  if (c.description.trim()) lines.push(`DESCRIPTION:${icsEscape(c.description.trim())}`);
+  lines.push("END:VEVENT", "END:VCALENDAR");
+  return lines.join("\n");
+}
+
 // geo: is RFC 5870 — vendor-neutral (unlike a Google/Apple Maps URL), and
 // natively recognized by both iOS and Android, which open the person's
 // default maps app. Altitude is the only other field the RFC defines, so
@@ -2025,6 +2189,9 @@ function getPayloadString() {
   if (state.qrType === "email") {
     return state.email.to.trim() ? buildMailtoPayload() : "";
   }
+  if (state.qrType === "calendar") {
+    return (state.calendar.title.trim() && state.calendar.start) ? buildCalendarPayload() : "";
+  }
   if (state.qrType === "geo") {
     return validateGeo(state.geo).valid ? buildGeoPayload() : "";
   }
@@ -2118,6 +2285,8 @@ async function render() {
         ? "Add a first or last name to get started."
         : state.qrType === "email"
         ? "Add a recipient address to get started."
+        : state.qrType === "calendar"
+        ? "Add an event title and start time to get started."
         : "Add some text or a link to get started.";
     }
     setExportButtonsEnabled(false);
