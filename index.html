@@ -381,6 +381,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
   min-height: 1.2em;
 }
 .preview-status.is-error { color: #c2410c; font-weight: 500; }
+.preview-status.is-warning { color: var(--accent-strong); font-weight: 500; }
 
 .copy-icon-btn {
   position: absolute;
@@ -2439,6 +2440,57 @@ function buildQrOptions(logoDataUrl) {
 }
 
 /* =================================================================
+   Scannability: foreground/background contrast check
+   -----------------------------------------------------------------
+   Not a formal QR spec requirement — scanners binarize the image
+   rather than reading raw contrast — but very low luminance
+   difference between the modules and the background is a common,
+   easy-to-hit way to produce a code that looks fine on screen and
+   fails to scan, especially once printed or viewed at an angle.
+   These thresholds are a practical heuristic (checked against a
+   handful of real scanners), not a cited standard.
+================================================================= */
+function srgbToLinear(c) {
+  c /= 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+function relativeLuminance(hex) {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
+}
+function contrastRatio(hexA, hexB) {
+  const lA = relativeLuminance(hexA), lB = relativeLuminance(hexB);
+  const lighter = Math.max(lA, lB), darker = Math.min(lA, lB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+// A color group is either a flat color or a two-stop gradient — either
+// way, every color actually painted onto the code needs to be checked,
+// not just the "primary" one.
+function colorsInGroup(group) {
+  return group.gradient ? group.gradient.stops.slice() : [group.color];
+}
+// Returns null when contrast is fine (or can't be evaluated — a
+// transparent background could land on anything), otherwise the worst
+// ratio found plus a severity used to pick the message/style.
+function getContrastIssue() {
+  const bg = state.colors.background;
+  if (bg.transparent) return null;
+  const bgColors = colorsInGroup(bg);
+  const fgColors = [state.colors.dots, state.colors.cornersSquare, state.colors.cornersDot]
+    .flatMap(colorsInGroup);
+  let worst = Infinity;
+  fgColors.forEach((fg) => bgColors.forEach((bgHex) => {
+    worst = Math.min(worst, contrastRatio(fg, bgHex));
+  }));
+  // Calibrated against the bundled presets: Amber's corner-square color
+  // sits at ~3.19:1 against white and reads fine in practice, so the
+  // warning band starts just below that rather than catching it too.
+  if (worst < 1.8) return { severity: "error", ratio: worst };
+  if (worst < 3) return { severity: "warning", ratio: worst };
+  return null;
+}
+
+/* =================================================================
    Render pipeline
 ================================================================= */
 const EMPTY_PLACEHOLDER = `<div style="display:flex;flex-direction:column;align-items:center;gap:0.6rem;color:var(--text-faint);padding:2.5rem 0;">
@@ -2468,6 +2520,11 @@ async function render() {
 
   if (!text) {
     mount.innerHTML = EMPTY_PLACEHOLDER;
+    // The branches below only ever set/clear is-error — an is-warning left
+    // over from a previous render (the contrast check, further down) has
+    // no relevance to an empty-input prompt, so it's cleared unconditionally
+    // here rather than repeating this in all four branches.
+    status.classList.remove("is-warning");
     if (state.qrType === "geo") {
       // Distinguish "nothing entered yet" from "entered but out of range" —
       // the field-level red borders already flag which one, this line just
@@ -2531,12 +2588,21 @@ async function render() {
     mount.innerHTML = composite.svg;
     lastComposite = composite;
 
-    status.classList.remove("is-error");
-    status.textContent = `${text.length} character${text.length === 1 ? "" : "s"} · ${state.ecc} error correction`;
+    status.classList.remove("is-error", "is-warning");
+    let statusText = `${text.length} character${text.length === 1 ? "" : "s"} · ${state.ecc} error correction`;
+    const contrastIssue = getContrastIssue();
+    if (contrastIssue) {
+      statusText += contrastIssue.severity === "error"
+        ? " · Won't scan — dots and background are too close in color"
+        : " · Low contrast — may not scan reliably once printed";
+      status.classList.add(contrastIssue.severity === "error" ? "is-error" : "is-warning");
+    }
+    status.textContent = statusText;
     setExportButtonsEnabled(true);
   } catch (err) {
     if (token !== renderToken) return;
     console.error(err);
+    status.classList.remove("is-warning");
     status.classList.add("is-error");
     status.textContent = friendlyErrorMessage(err);
     setExportButtonsEnabled(false);
