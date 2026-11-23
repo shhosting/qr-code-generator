@@ -6,6 +6,8 @@ plate, and five frame styles — exported as PNG, SVG, JPEG, or WebP.
 
 **Live:** https://shhosting.net/qr-code-generator
 
+**Current version:** 1.0.0
+
 ## Why
 
 I wanted a QR generator that didn't require an account and didn't phone
@@ -33,7 +35,7 @@ leaves the browser.
 ## Running locally
 
 There's nothing to build. The page links `/assets/css/style.css`,
-`/assets/js/nav.js`, and `/assets/img/*` from the shhosting.net site root
+`/assets/css/site-shell.css`, `/assets/js/site-shell.js`, and `/assets/img/*` from the shhosting.net site root
 for header/nav/footer styling, so serve it from something that also
 exposes those paths (e.g. a checkout of
 [shhosting.github.io](https://github.com/shhosting/shhosting.github.io),
