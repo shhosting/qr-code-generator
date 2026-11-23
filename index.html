@@ -22,6 +22,7 @@
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="stylesheet" href="/assets/css/style.css">
+<link rel="stylesheet" href="/assets/css/site-shell.css">
 <style>
 /* ---------------------------------------------------------------
    Page-scoped styles — structural/behavioral CSS kept from the
@@ -487,23 +488,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 
-<header>
-  <a class="brand-link" href="/" aria-label="shhosting.net home">
-    <img class="logo-icon theme-swap light" src="/assets/img/logo-light.svg" alt="">
-    <img class="logo-icon theme-swap dark" src="/assets/img/logo-dark.svg" alt="">
-    <img class="logo-wordmark theme-swap light" src="/assets/img/wordmark-light.svg" alt="shhosting.net">
-    <img class="logo-wordmark theme-swap dark" src="/assets/img/wordmark-dark.svg" alt="shhosting.net">
-  </a>
-  <nav class="site-nav">
-    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="navMenu" aria-label="Open menu">
-      <span class="nav-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
-    </button>
-    <ul class="nav-menu" id="navMenu">
-      <li><a href="/checksum-verifier">Checksum Verifier</a></li>
-      <li><a href="/qr-code-generator">QR Code Generator</a></li>
-    </ul>
-  </nav>
-</header>
+
 
 <main id="main" class="wrap">
   <div class="intro">
@@ -940,13 +925,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
   <div class="tool-foot">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser.<br>Codes are static: the content is baked in at generation time, so edit-after-print or scan tracking isn't supported. Regenerate a new code if the underlying info changes.</div>
 </main>
 
-<footer>
-  <p class="tool-disclaimer">This tool was built with the help of various AI agents, models, and platforms. Its code is <a href="https://github.com/shhosting/qr-code-generator">open source.</a></p>
-  <span class="footer-credit">
-    <span class="footer-group">&copy; 2026 shhosting.net &middot; <a href="mailto:contact@shhosting.net">contact@shhosting.net</a></span>
-    <span class="footer-group">&middot; Hosted on <a href="https://pages.github.com/">GitHub Pages</a> &middot; Site built with <a href="https://claude.ai">Claude</a></span>
-  </span>
-</footer>
+<p class="tool-disclaimer">This tool's code is <a href="https://github.com/shhosting/qr-code-generator">open source</a>.</p>
 
 <div class="copy-toast" id="copy-toast">Copied to clipboard</div>
 
@@ -2682,6 +2661,6 @@ render();
 })();
 
 </script>
-<script src="/assets/js/nav.js" defer></script>
+<script src="/assets/js/site-shell.js" defer></script>
 </body>
 </html>
