@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QR Code Generator — shhosting.net</title>
 <meta name="description" content="Offline QR code generator. Style the shape, colors, logo, and frame, then export PNG, SVG, JPEG, or WebP. Nothing leaves your browser.">
+<meta name="application-version" content="1.0.0">
+<!-- QR Code Generator v1.0.0 (2026-11-23); vendored qr-code-styling dependency remains v1.9.2. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: blob:; manifest-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -463,11 +465,28 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
 }
 .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* Tool-specific line that sits above the shared .footer-credit block
-   (same pairing pattern as checksum-verifier's .ai-disclaimer). */
+/* Keep the open-source note immediately above the shared site footer,
+   matching the Bank game's note without modifying the shared footer. */
 .tool-disclaimer {
   max-width: none;
-  margin: 0 auto 5px;
+  margin: 0 auto -14px;
+  text-align: center;
+  font-size: 0.8rem;
+  opacity: 0.55;
+}
+.tool-disclaimer a {
+  display: inline;
+  position: static;
+  vertical-align: baseline;
+  line-height: inherit;
+  margin: 0;
+  padding: 0;
+}
+.tool-version {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 /* Matches checksum-verifier's .foot: sits inside <main>, directly below
@@ -925,7 +944,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
   <div class="tool-foot">Built with <a href="https://github.com/kozakdenys/qr-code-styling" target="_blank" rel="noopener">qr-code-styling</a> (MIT licensed). No analytics, no server, no accounts — everything runs in your browser.<br>Codes are static: the content is baked in at generation time, so edit-after-print or scan tracking isn't supported. Regenerate a new code if the underlying info changes.</div>
 </main>
 
-<p class="tool-disclaimer">This tool's code is <a href="https://github.com/shhosting/qr-code-generator">open source</a>.</p>
+<p class="tool-disclaimer">This tool's code is <a href="https://github.com/shhosting/qr-code-generator">open source</a> <span class="tool-version">&middot; v1.0.0</span></p>
 
 <div class="copy-toast" id="copy-toast">Copied to clipboard</div>
 
