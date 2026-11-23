@@ -474,14 +474,9 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 0.15rem 
   font-size: 0.8rem;
   opacity: 0.55;
 }
-.tool-disclaimer a {
-  display: inline-block;
-  position: static;
-  vertical-align: baseline;
-  line-height: 1;
-  margin: 0;
-  padding: 0;
-}
+/* Use the shared site's normal inline-link behavior, matching the
+   Bank game's disclaimer. A custom inline-block box created a hover
+   target above the visible glyphs in some browsers. */
 .tool-version {
   display: inline-block;
   margin-left: 8px;
